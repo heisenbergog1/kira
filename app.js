@@ -10,7 +10,7 @@ var state = {
   audioType: 'sub',
   episodesSortAsc: true,
   currentChunk: 0,
-  chunkSize: 50,
+  chunkSize: 24,
   watchlist: [],
   notifications: [],
   continueWatching: [],
@@ -543,10 +543,16 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
         streamUrl = streamUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
       }
 
-      state.currentStreamUrl = streamUrl;
-      if (streamUrlInput) streamUrlInput.value = streamUrl;
+      // Route megavid.buzz/vid/ through stream proxy (injects Referer header) to guarantee 200 OK
+      var playbackUrl = streamUrl;
+      if (streamUrl.indexOf('megavid.buzz/vid/') !== -1) {
+        playbackUrl = API_BASE + '/api/stream?url=' + encodeURIComponent(streamUrl);
+      }
 
-      startHlsPlayback(streamUrl, data.tracks || []);
+      state.currentStreamUrl = playbackUrl;
+      if (streamUrlInput) streamUrlInput.value = playbackUrl;
+
+      startHlsPlayback(playbackUrl, data.tracks || []);
     } else {
       if (loader) loader.className = 'player-loader hidden';
       if (errorOverlay) errorOverlay.className = 'player-error-overlay';

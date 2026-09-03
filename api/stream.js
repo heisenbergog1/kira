@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -17,7 +17,8 @@ export default async function handler(req, res) {
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Referer': 'https://megavid.buzz/',
-      'Origin': 'https://megavid.buzz'
+      'Origin': 'https://megavid.buzz',
+      'Accept': '*/*'
     };
 
     if (req.headers.range) {
@@ -46,9 +47,9 @@ export default async function handler(req, res) {
       return res.status(upstreamRes.status).send(modifiedBody);
     } else {
       const buffer = await upstreamRes.arrayBuffer();
-      if (upstreamRes.headers.get('content-type')) {
-        res.setHeader('Content-Type', upstreamRes.headers.get('content-type'));
-      }
+      const contentType = upstreamRes.headers.get('content-type') || (targetStreamUrl.includes('.jpg') ? 'video/mp2t' : 'video/mp2t');
+      res.setHeader('Content-Type', contentType);
+      
       if (upstreamRes.headers.get('content-range')) {
         res.setHeader('Content-Range', upstreamRes.headers.get('content-range'));
       }
