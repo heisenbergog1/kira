@@ -566,10 +566,9 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
 
         // Automatic Highest Quality Fallback if selected quality doesn't exist
         var targetUrl = getBestQualityUrl(state.availableQualities, state.selectedQuality, streamUrl);
-        var finalPlaybackUrl = targetUrl.indexOf('/api/stream') === 0 ? targetUrl : (API_BASE + '/api/stream?url=' + encodeURIComponent(targetUrl));
 
-        if (streamUrlInput) streamUrlInput.value = finalPlaybackUrl;
-        startHlsPlayback(finalPlaybackUrl, data.tracks || []);
+        if (streamUrlInput) streamUrlInput.value = targetUrl;
+        startHlsPlayback(targetUrl, data.tracks || []);
       });
     } else {
       if (loader) loader.className = 'player-loader hidden';
