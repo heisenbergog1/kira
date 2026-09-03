@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CineStream">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#06090e">
+  <title>CineStream • Anime</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.light.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-theme">
+  <div id="app" class="app-container">
+    
+    <!-- TOP HEADER -->
+    <header id="main-header" class="top-header">
+      <button id="btn-search-toggle" class="icon-btn" aria-label="Search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </button>
+      <div class="search-input-wrapper" id="search-bar-container">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="search" id="global-search-input" placeholder="Search anime, movies, series..." autocomplete="off">
+        <button id="btn-clear-search" class="icon-btn-sm hidden">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="header-actions">
+        <button id="btn-theme-avatar" class="avatar-btn" title="Profile / Watchlist">
+          <div class="avatar-ring">
+            <div class="avatar-inner"></div>
+          </div>
+        </button>
+      </div>
+    </header>
+
+    <!-- SEARCH OVERLAY -->
+    <section id="search-results-section" class="search-overlay hidden">
+      <div class="search-header">
+        <h3 id="search-results-title">Search Results</h3>
+        <button id="btn-close-search" class="btn-text">Close</button>
+      </div>
+      <div id="search-results-grid" class="media-grid"></div>
+    </section>
+
+    <!-- SCROLLABLE MAIN -->
+    <main id="main-content" class="scrollable-content">
+
+      <!-- ================= HOME VIEW ================= -->
+      <div id="home-view" class="view-screen active">
+        
+        <!-- HERO BANNER -->
+        <section class="hero-carousel" id="hero-section">
+          <div class="hero-backdrop" id="hero-backdrop"></div>
+          <div class="hero-overlay-gradient"></div>
+          <div class="hero-content">
+            <span class="hero-genre-badge" id="hero-genre">Fantasy • Action</span>
+            <h1 class="hero-title" id="hero-title">NieR:Automata Ver1.1a</h1>
+            <p class="hero-description" id="hero-desc">Discover the top rated anime series, movies, and episodes.</p>
+            <div class="hero-buttons">
+              <button id="hero-btn-watchlist" class="btn btn-secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span id="hero-watchlist-text">Watchlist</span>
+              </button>
+              <button id="hero-btn-play" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Play</span>
+              </button>
+              <button id="hero-btn-info" class="btn btn-secondary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span>Info</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- CONTINUE WATCHING -->
+        <section class="content-section" id="continue-watching-section">
+          <div class="section-header">
+            <h2 class="section-title">Continue Watching</h2>
+            <button class="section-arrow-btn" aria-label="View all">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </button>
+          </div>
+          <div class="horizontal-scroll-row" id="continue-watching-row"></div>
+        </section>
+
+        <!-- CATEGORY TABS -->
+        <div class="category-tabs-container">
+          <div class="category-tabs" id="filter-tabs">
+            <button class="tab-pill active" data-filter="trending">Trending</button>
+            <button class="tab-pill" data-filter="top_airing">Airing</button>
+            <button class="tab-pill" data-filter="popular">Popular</button>
+            <button class="tab-pill" data-filter="movies">Top Movies</button>
+            <button class="tab-pill" data-filter="watchlist">Plan to Watch</button>
+            <button class="tab-pill" data-filter="completed">Completed</button>
+          </div>
+        </div>
+
+        <!-- MAIN MEDIA GRID -->
+        <section class="content-section">
+          <div class="media-grid" id="main-media-grid"></div>
+        </section>
+
+        <!-- TOP MOVIES -->
+        <section class="content-section">
+          <div class="section-header">
+            <h2 class="section-title">Top Movies</h2>
+            <button class="section-arrow-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </button>
+          </div>
+          <div class="horizontal-scroll-row" id="top-movies-row"></div>
+        </section>
+
+        <!-- TOP SERIES -->
+        <section class="content-section">
+          <div class="section-header">
+            <h2 class="section-title">Top Series</h2>
+            <button class="section-arrow-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </button>
+          </div>
+          <div class="horizontal-scroll-row" id="top-series-row"></div>
+        </section>
+
+      </div>
+
+      <!-- ================= DETAILS VIEW ================= -->
+      <div id="details-view" class="view-screen hidden">
+        
+        <div class="details-nav-bar">
+          <button id="btn-details-back" class="icon-btn-round" aria-label="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          </button>
+        </div>
+
+        <div class="details-hero">
+          <div class="details-backdrop" id="details-backdrop"></div>
+          <div class="details-hero-gradient"></div>
+          <div class="details-hero-content">
+            <h1 class="details-anime-title" id="details-title">Loading Anime...</h1>
+          </div>
+        </div>
+
+        <div class="details-body">
+          <div class="details-tags-row">
+            <span class="meta-tag badge-brand">CineStream</span>
+            <span class="meta-tag badge-source" id="details-source-tag">Kitsu</span>
+            <span class="meta-tag badge-type" id="details-type">Anime</span>
+            <span class="meta-tag" id="details-year">2024</span>
+            <span class="meta-tag badge-rating" id="details-score">6.9/10.0</span>
+          </div>
+
+          <div class="synopsis-wrapper">
+            <p class="synopsis-text" id="details-synopsis">Loading synopsis...</p>
+            <button id="btn-synopsis-toggle" class="btn-more">More</button>
+          </div>
+
+          <div class="cast-section">
+            <h3 class="subsection-title">Characters & Voice Actors</h3>
+            <div class="cast-scroll-row" id="details-cast-row"></div>
+          </div>
+
+          <div class="genre-pills-row" id="details-genres-row"></div>
+
+          <div class="episodes-control-bar">
+            <button id="btn-sort-episodes" class="btn-control-pill">
+              <span id="sort-ep-label">Ep ↑</span>
+            </button>
+            
+            <div class="audio-toggle-pill">
+              <button class="audio-btn active" data-type="sub">Sub</button>
+              <button class="audio-btn" data-type="dub">Dub</button>
+            </div>
+
+            <div class="quality-selector-container" id="details-quality-container">
+              <button id="btn-details-quality" class="btn-quality-pill" title="Select Video Quality">
+                <span id="details-quality-label">Quality: Auto</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div id="details-quality-menu" class="quality-dropdown hidden"></div>
+            </div>
+
+            <div class="episodes-count-meta">
+              <span id="details-episode-count" class="episodes-count-text">12 Episodes</span>
+            </div>
+          </div>
+
+          <div class="episodes-list" id="details-episodes-list"></div>
+        </div>
+
+      </div>
+
+      <!-- ================= LIBRARY VIEW ================= -->
+      <div id="library-view" class="view-screen hidden">
+        <div class="screen-header" style="padding: 18px;">
+          <h2 class="section-title">My Library</h2>
+        </div>
+        <div class="media-grid" id="library-media-grid"></div>
+      </div>
+
+    </main>
+
+    <!-- ================= DIRECT M3U8 VIDEO PLAYER MODAL ================= -->
+    <div id="video-player-modal" class="player-modal hidden">
+      <div class="player-container">
+        
+        <div class="player-top-bar">
+          <button id="btn-player-back" class="icon-btn-player" aria-label="Close Player">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="player-now-playing">
+            <h4 id="player-title">Episode Title</h4>
+            <span id="player-subtitle">Anime Name • Ep 1 (Sub)</span>
+          </div>
+          <div class="player-top-right">
+            <div class="quality-selector-container hidden" id="quality-selector-container">
+              <button id="btn-quality-toggle" class="btn-quality-pill" title="Select Video Quality">
+                <span id="quality-label">Auto</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <div id="quality-dropdown-menu" class="quality-dropdown hidden"></div>
+            </div>
+            <button id="btn-copy-m3u8" class="icon-btn-player" title="Copy Direct M3U8 Link">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            </button>
+            <button id="btn-open-external" class="icon-btn-player" title="Open M3U8 in New Tab">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="video-wrapper" id="video-wrapper">
+          <video id="main-video" controls playsinline webkit-playsinline preload="auto"></video>
+          
+          <div id="player-loader" class="player-loader hidden">
+            <div class="spinner"></div>
+            <p id="player-loader-text">Resolving direct M3U8 stream...</p>
+          </div>
+
+          <div id="player-error" class="player-error-overlay hidden">
+            <svg class="error-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <h3 id="player-error-title">Playback Error</h3>
+            <p id="player-error-msg">Failed to load stream.</p>
+            <div class="player-error-actions">
+              <button id="btn-player-retry" class="btn btn-primary">Retry</button>
+              <button id="btn-player-fallback" class="btn btn-secondary">Try Other Audio</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="direct-stream-bar">
+          <div class="stream-badge">DIRECT M3U8</div>
+          <input type="text" id="stream-url-display" readonly value="Resolving..." class="stream-url-input">
+          <button id="btn-copy-stream-url" class="btn-copy">Copy</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================= BOTTOM NAVIGATION BAR ================= -->
+    <nav class="bottom-nav-bar">
+      <button class="nav-item active" data-view="home">
+        <div class="nav-icon-wrapper">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        </div>
+      </button>
+      <button class="nav-item" data-view="search">
+        <div class="nav-icon-wrapper">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </div>
+      </button>
+      <button class="nav-item" data-view="library">
+        <div class="nav-icon-wrapper">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        </div>
+      </button>
+      <button class="nav-item" data-view="downloads">
+        <div class="nav-icon-wrapper">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        </div>
+      </button>
+      <button class="nav-item" data-view="settings">
+        <div class="nav-icon-wrapper">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </div>
+      </button>
+
+      <button id="btn-fab-menu" class="fab-menu-btn" title="Menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+      </button>
+    </nav>
+
+    <div id="toast" class="toast hidden"></div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "cinestream",
+  "version": "1.0.0",
+  "description": "CineStream - Anime Streaming Platform with direct M3U8 player",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {}
+}

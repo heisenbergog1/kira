@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/api/source", "dest": "/api/source.js" },
+    { "src": "/api/catalog", "dest": "/api/catalog.js" },
+    { "src": "/api/stream", "dest": "/api/stream.js" },
+    { "src": "/api/img", "dest": "/api/img.js" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
+}
