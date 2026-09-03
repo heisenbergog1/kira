@@ -1119,7 +1119,11 @@ function setupEvents() {
   var btnOpenExt = document.getElementById('btn-open-external');
   if (btnOpenExt) {
     btnOpenExt.onclick = function() {
-      if (state.currentStreamUrl) window.open(state.currentStreamUrl, '_blank');
+      if (state.currentStreamUrl) {
+        window.open(state.currentStreamUrl, '_blank');
+      } else {
+        showToast('Stream is resolving...');
+      }
     };
   }
 }
