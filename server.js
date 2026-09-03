@@ -76,8 +76,7 @@ function fetchUrl(targetUrl, headers = {}, postData = null, isBinary = false, ra
 
 function resolveDirectM3u8(sourceUrl) {
   if (!sourceUrl || typeof sourceUrl !== 'string') return sourceUrl;
-  // Replace vid CDN master.m3u8 with index-f1-v1-a1.m3u8
-  if (sourceUrl.includes('megavid.buzz/vid/') && sourceUrl.includes('master.m3u8')) {
+  if (sourceUrl.includes('master.m3u8')) {
     return sourceUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
   }
   return sourceUrl;

@@ -38,6 +38,8 @@ export default async function handler(req, res) {
 
     if (data && data.source) {
       let streamUrl = data.source;
+      
+      // Convert master.m3u8 to index-f1-v1-a1.m3u8 format
       if (streamUrl.includes('master.m3u8')) {
         streamUrl = streamUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
       }

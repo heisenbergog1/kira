@@ -535,41 +535,18 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
 
   var sourceApiUrl = API_BASE + '/api/source?id=' + malId + '&ep=' + episode + '&type=' + state.audioType;
   httpGet(sourceApiUrl, function(err, data) {
-    if (!err && data && data.status === 'ok' && (data.streamUrl || data.proxiedUrl)) {
+    if (!err && data && data.status === 'ok' && data.streamUrl) {
       var streamUrl = data.streamUrl;
-      if (streamUrl.indexOf('megavid.buzz/vid/') !== -1 && streamUrl.indexOf('master.m3u8') !== -1) {
+      
+      // Convert master.m3u8 format to index-f1-v1-a1.m3u8
+      if (streamUrl.indexOf('master.m3u8') !== -1) {
         streamUrl = streamUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
       }
 
       state.currentStreamUrl = streamUrl;
+      if (streamUrlInput) streamUrlInput.value = streamUrl;
 
-      // Extract available qualities from master playlist or source
-      httpGet(API_BASE + '/api/stream?url=' + encodeURIComponent(streamUrl), function(pErr, playlistBody) {
-        if (!pErr && typeof playlistBody === 'string') {
-          var lines = playlistBody.split('\n');
-          var extracted = [];
-          for (var li = 0; li < lines.length; li++) {
-            var l = lines[li].trim();
-            if (l.indexOf('#EXT-X-STREAM-INF:') === 0) {
-              var hm = l.match(/RESOLUTION=\d+x(\d+)/i);
-              var h = hm ? hm[1] + 'p' : null;
-              var nl = (li + 1 < lines.length) ? lines[li + 1].trim() : '';
-              if (nl && nl.indexOf('#') !== 0) {
-                extracted.push({ label: h || ('Quality ' + (extracted.length + 1)), url: nl });
-              }
-            }
-          }
-          if (extracted.length > 0) {
-            renderQualityDropdown(extracted);
-          }
-        }
-
-        // Automatic Highest Quality Fallback if selected quality doesn't exist
-        var targetUrl = getBestQualityUrl(state.availableQualities, state.selectedQuality, streamUrl);
-
-        if (streamUrlInput) streamUrlInput.value = targetUrl;
-        startHlsPlayback(targetUrl, data.tracks || []);
-      });
+      startHlsPlayback(streamUrl, data.tracks || []);
     } else {
       if (loader) loader.className = 'player-loader hidden';
       if (errorOverlay) errorOverlay.className = 'player-error-overlay';
@@ -670,85 +647,82 @@ function renderQualityDropdown(qualities) {
 }
 
 
-function startHlsPlayback(streamUrl, tracks) {
+function startHlsPlayback(streamUrl, tracks, isRetryProxy) {
   var video = document.getElementById('main-video');
   var loader = document.getElementById('player-loader');
+  var errorOverlay = document.getElementById('player-error');
   if (!video) return;
-
-  state.selectedQuality = 'Auto';
-  var labelEl = document.getElementById('quality-label');
-  if (labelEl) labelEl.textContent = 'Auto';
 
   if (state.hlsPlayer) {
     state.hlsPlayer.destroy();
     state.hlsPlayer = null;
   }
 
-  // Fetch M3U8 text to parse sub-qualities for native and HLS players
-  httpGet(streamUrl, function(err, m3u8Data) {
-    var rawText = (typeof m3u8Data === 'string') ? m3u8Data : '';
-    var baseUrl = streamUrl.substring(0, streamUrl.lastIndexOf('/') + 1);
-    var parsedQualities = parseM3u8Qualities(rawText, baseUrl);
-
-    if (window.Hls && Hls.isSupported()) {
-      var hls = new Hls({ enableWorker: true });
-      state.hlsPlayer = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
-        if (loader) loader.className = 'player-loader hidden';
-        video.play();
-
-        var hlsQualities = [];
-        if (data && data.levels && data.levels.length > 1) {
-          for (var i = 0; i < data.levels.length; i++) {
-            var lvl = data.levels[i];
-            var h = lvl.height ? (lvl.height + 'p') : ('Quality ' + (i + 1));
-            hlsQualities.push({ label: h, index: i });
-          }
-        }
-        setupQualitySelector(hlsQualities.length > 0 ? hlsQualities : parsedQualities, function(idx, qualityUrl) {
-          if (idx === -1) {
-            hls.currentLevel = -1; // Auto
-          } else {
-            hls.currentLevel = idx;
-          }
-        });
-      });
-
-      hls.on(Hls.Events.ERROR, function(event, data) {
-        if (data.fatal) {
-          hls.destroy();
-          if (loader) loader.className = 'player-loader hidden';
-        }
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native Safari / iOS
-      video.src = streamUrl;
-      video.onloadedmetadata = function() {
-        if (loader) loader.className = 'player-loader hidden';
-        video.play();
-      };
-      video.onerror = function() {
-        if (loader) loader.className = 'player-loader hidden';
-      };
-
-      setupQualitySelector(parsedQualities, function(idx, qualityUrl) {
-        var currentTime = video.currentTime;
-        var isPlaying = !video.paused;
-        var newSrc = (idx === -1 || !qualityUrl) ? streamUrl : (qualityUrl.indexOf('/api/stream') === 0 ? qualityUrl : (API_BASE + '/api/stream?url=' + encodeURIComponent(qualityUrl)));
-        video.src = newSrc;
-        video.onloadedmetadata = function() {
-          video.currentTime = currentTime;
-          if (isPlaying) video.play();
-        };
-      });
+  var handlePlaybackError = function() {
+    if (!isRetryProxy) {
+      // Auto-fallback to Proxy URL if direct stream encounters 403 / CORS
+      var proxiedUrl = API_BASE + '/api/stream?url=' + encodeURIComponent(streamUrl);
+      startHlsPlayback(proxiedUrl, tracks, true);
     } else {
-      video.src = streamUrl;
       if (loader) loader.className = 'player-loader hidden';
+      if (errorOverlay) errorOverlay.className = 'player-error-overlay';
+      var errText = document.getElementById('player-error-msg');
+      if (errText) errText.textContent = 'Stream error. Please try switching between Sub/Dub.';
     }
-  });
+  };
+
+  if (window.Hls && Hls.isSupported()) {
+    var hls = new Hls({ enableWorker: true, maxBufferLength: 30 });
+    state.hlsPlayer = hls;
+    hls.loadSource(streamUrl);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+      if (loader) loader.className = 'player-loader hidden';
+      video.play().catch(function() {});
+
+      if (data && data.levels && data.levels.length > 1) {
+        var hlsQualities = [];
+        for (var i = 0; i < data.levels.length; i++) {
+          var lvl = data.levels[i];
+          var h = lvl.height ? (lvl.height + 'p') : ('Quality ' + (i + 1));
+          hlsQualities.push({ label: h, index: i });
+        }
+        renderQualityDropdown(hlsQualities);
+      }
+    });
+
+    hls.on(Hls.Events.ERROR, function(event, data) {
+      if (data.fatal) {
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            hls.destroy();
+            handlePlaybackError();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            hls.recoverMediaError();
+            break;
+          default:
+            hls.destroy();
+            handlePlaybackError();
+            break;
+        }
+      }
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Native Safari / iPad iOS 9
+    video.src = streamUrl;
+    video.onloadedmetadata = function() {
+      if (loader) loader.className = 'player-loader hidden';
+      video.play().catch(function() {});
+    };
+    video.onerror = function() {
+      handlePlaybackError();
+    };
+  } else {
+    video.src = streamUrl;
+    if (loader) loader.className = 'player-loader hidden';
+  }
 }
 
 function saveContinueWatching(malId, episode) {
