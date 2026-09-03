@@ -1119,12 +1119,14 @@ function setupEvents() {
   var btnOpenExt = document.getElementById('btn-open-external');
   if (btnOpenExt) {
     btnOpenExt.onclick = function() {
-      if (state.selectedAnime && state.currentEpisode) {
-        var malId = state.selectedAnime.idMal || state.selectedAnime.id;
-        var playUrl = window.location.origin + '/?play=' + malId + '&ep=' + state.currentEpisode + '&type=' + state.audioType;
-        window.open(playUrl, '_blank');
-      } else if (state.currentStreamUrl) {
-        window.open(state.currentStreamUrl, '_blank');
+      if (state.currentStreamUrl) {
+        var a = document.createElement('a');
+        a.href = state.currentStreamUrl;
+        a.target = '_blank';
+        a.rel = 'noreferrer noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       } else {
         showToast('Stream is resolving...');
       }
