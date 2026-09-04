@@ -77,7 +77,8 @@ function fetchUrl(targetUrl, headers = {}, postData = null, isBinary = false, ra
 
 function resolveDirectM3u8(sourceUrl) {
   if (!sourceUrl || typeof sourceUrl !== 'string') return sourceUrl;
-  if (sourceUrl.includes('master.m3u8')) {
+  // Only rename master.m3u8 for megavid.buzz — HiAnime uses master.m3u8 natively
+  if (sourceUrl.includes('megavid.buzz') && sourceUrl.includes('master.m3u8')) {
     return sourceUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
   }
   return sourceUrl;
@@ -135,24 +136,72 @@ const server = http.createServer(async (req, res) => {
       if (isM3u8) {
         resHeaders['Content-Type'] = 'application/vnd.apple.mpegurl';
         let playlistContent = response.body;
-
-        // Rewrite relative URLs inside M3U8 so segments route through proxy
         const baseUrl = targetStreamUrl.substring(0, targetStreamUrl.lastIndexOf('/') + 1);
-        const lines = playlistContent.split('\n');
-        const rewrittenLines = lines.map(line => {
-          line = line.trim();
-          if (!line || line.startsWith('#')) return line;
-          let absoluteSegmentUrl = line;
-          if (!line.startsWith('http://') && !line.startsWith('https://')) {
-            absoluteSegmentUrl = baseUrl + line;
-          }
-          return `/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
-        });
+        const hostHeader = req.headers.host || `localhost:${PORT}`;
+        const prefix = `http://${hostHeader}`;
 
-        const modifiedBody = rewrittenLines.join('\n');
-        resHeaders['Content-Length'] = Buffer.byteLength(modifiedBody);
-        res.writeHead(response.status, resHeaders);
-        res.end(modifiedBody);
+        if (playlistContent.includes('#EXT-X-STREAM-INF')) {
+          // Master playlist with multiple quality ladders (e.g. HiAnime 360p, 720p, 1080p)
+          // Sort descending by bandwidth so Apple AVPlayer / new tab starts immediately in full 1080p
+          const lines = playlistContent.split('\n');
+          const headerLines = [];
+          const variants = [];
+          let currentInf = null;
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            if (line.startsWith('#EXT-X-STREAM-INF')) {
+              currentInf = line;
+            } else if (currentInf) {
+              let absoluteSegmentUrl = line;
+              if (!line.startsWith('http://') && !line.startsWith('https://')) {
+                absoluteSegmentUrl = baseUrl + line;
+              }
+              const bwMatch = currentInf.match(/BANDWIDTH=(\d+)/);
+              const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+              variants.push({
+                inf: currentInf,
+                url: `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`,
+                bw: bw
+              });
+              currentInf = null;
+            } else {
+              headerLines.push(line);
+            }
+          }
+
+          // Sort 1080p > 720p > 360p
+          variants.sort((a, b) => b.bw - a.bw);
+
+          const outLines = [...headerLines];
+          for (const v of variants) {
+            outLines.push(v.inf);
+            outLines.push(v.url);
+          }
+
+          const modifiedBody = outLines.join('\n');
+          resHeaders['Content-Length'] = Buffer.byteLength(modifiedBody);
+          res.writeHead(response.status, resHeaders);
+          res.end(modifiedBody);
+        } else {
+          // Media segment playlist (.ts list)
+          const lines = playlistContent.split('\n');
+          const rewrittenLines = lines.map(line => {
+            line = line.trim();
+            if (!line || line.startsWith('#')) return line;
+            let absoluteSegmentUrl = line;
+            if (!line.startsWith('http://') && !line.startsWith('https://')) {
+              absoluteSegmentUrl = baseUrl + line;
+            }
+            return `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
+          });
+
+          const modifiedBody = rewrittenLines.join('\n');
+          resHeaders['Content-Length'] = Buffer.byteLength(modifiedBody);
+          res.writeHead(response.status, resHeaders);
+          res.end(modifiedBody);
+        }
       } else {
         res.writeHead(response.status, resHeaders);
         res.end(response.body);

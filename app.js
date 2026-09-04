@@ -693,7 +693,8 @@ function startHlsPlayback(streamUrl, tracks, isRetryProxy) {
         for (var i = 0; i < data.levels.length; i++) {
           var lvl = data.levels[i];
           var h = lvl.height ? (lvl.height + 'p') : ('Quality ' + (i + 1));
-          hlsQualities.push({ label: h, index: i });
+          var qUrl = (lvl.url && lvl.url.length > 0) ? lvl.url[0] : (lvl.uri || '');
+          hlsQualities.push({ label: h, index: i, url: qUrl });
         }
         renderQualityDropdown(hlsQualities);
       }
@@ -1154,8 +1155,12 @@ function setupEvents() {
   if (btnOpenExt) {
     btnOpenExt.onclick = function() {
       if (state.currentStreamUrl) {
+        var targetUrl = state.currentStreamUrl;
+        if (state.selectedQuality && state.selectedQuality !== 'Auto' && state.availableQualities && state.availableQualities.length > 0) {
+          targetUrl = getBestQualityUrl(state.availableQualities, state.selectedQuality, state.currentStreamUrl);
+        }
         var a = document.createElement('a');
-        a.href = state.currentStreamUrl;
+        a.href = targetUrl;
         a.target = '_blank';
         a.rel = 'noreferrer noopener';
         document.body.appendChild(a);

@@ -49,21 +49,68 @@ export default async function handler(req, res) {
       const host = req.headers['x-forwarded-host'] || req.headers.host || '';
       const prefix = host ? `${proto}://${host}` : '';
 
-      const lines = playlistContent.split('\n');
-      const rewrittenLines = lines.map(line => {
-        line = line.trim();
-        if (!line || line.startsWith('#')) return line;
-        let absoluteSegmentUrl = line;
-        if (!line.startsWith('http://') && !line.startsWith('https://')) {
-          absoluteSegmentUrl = baseUrl + line;
-        }
-        return `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
-      });
+      if (playlistContent.includes('#EXT-X-STREAM-INF')) {
+        // Master playlist with multiple quality ladders (e.g. HiAnime 360p, 720p, 1080p)
+        // Sort descending by bandwidth so Apple AVPlayer / new tab starts immediately in full 1080p
+        const lines = playlistContent.split('\n');
+        const headerLines = [];
+        const variants = [];
+        let currentInf = null;
 
-      const modifiedBody = rewrittenLines.join('\n');
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.status(upstreamRes.status).send(modifiedBody);
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          if (line.startsWith('#EXT-X-STREAM-INF')) {
+            currentInf = line;
+          } else if (currentInf) {
+            let absoluteSegmentUrl = line;
+            if (!line.startsWith('http://') && !line.startsWith('https://')) {
+              absoluteSegmentUrl = baseUrl + line;
+            }
+            const bwMatch = currentInf.match(/BANDWIDTH=(\d+)/);
+            const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
+            variants.push({
+              inf: currentInf,
+              url: `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`,
+              bw: bw
+            });
+            currentInf = null;
+          } else {
+            headerLines.push(line);
+          }
+        }
+
+        // Sort 1080p > 720p > 360p
+        variants.sort((a, b) => b.bw - a.bw);
+
+        const outLines = [...headerLines];
+        for (const v of variants) {
+          outLines.push(v.inf);
+          outLines.push(v.url);
+        }
+
+        const modifiedBody = outLines.join('\n');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(upstreamRes.status).send(modifiedBody);
+      } else {
+        // Media segment playlist (.ts list)
+        const lines = playlistContent.split('\n');
+        const rewrittenLines = lines.map(line => {
+          line = line.trim();
+          if (!line || line.startsWith('#')) return line;
+          let absoluteSegmentUrl = line;
+          if (!line.startsWith('http://') && !line.startsWith('https://')) {
+            absoluteSegmentUrl = baseUrl + line;
+          }
+          return `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
+        });
+
+        const modifiedBody = rewrittenLines.join('\n');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.status(upstreamRes.status).send(modifiedBody);
+      }
     } else {
       const buffer = await upstreamRes.arrayBuffer();
       const contentType = upstreamRes.headers.get('content-type') || (targetStreamUrl.includes('.jpg') ? 'video/mp2t' : 'video/mp2t');
