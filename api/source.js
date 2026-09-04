@@ -31,7 +31,7 @@ async function fetchMegavidSource(id, ep, audioType) {
   const data = await res.json();
   if (data && data.source) {
     let streamUrl = data.source;
-    if (streamUrl.includes('master.m3u8')) {
+    if (streamUrl.includes('megavid.buzz') && streamUrl.includes('master.m3u8')) {
       streamUrl = streamUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
     }
     return {

@@ -539,8 +539,8 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
     if (!err && data && data.status === 'ok' && data.streamUrl) {
       var streamUrl = data.streamUrl;
       
-      // Convert master.m3u8 format to index-f1-v1-a1.m3u8
-      if (streamUrl.indexOf('master.m3u8') !== -1) {
+      // Only convert master.m3u8 to index-f1-v1-a1 on megavid.buzz (HiAnime/aniwatchtv keeps master.m3u8)
+      if (streamUrl.indexOf('megavid.buzz') !== -1 && streamUrl.indexOf('master.m3u8') !== -1) {
         streamUrl = streamUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
       }
 
