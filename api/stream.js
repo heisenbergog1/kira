@@ -43,6 +43,12 @@ export default async function handler(req, res) {
     if (isM3u8) {
       const playlistContent = await upstreamRes.text();
       const baseUrl = targetStreamUrl.substring(0, targetStreamUrl.lastIndexOf('/') + 1);
+      
+      // Determine host for absolute URL rewriting so iOS Safari AVPlayer in new tabs resolves every segment correctly
+      const proto = req.headers['x-forwarded-proto'] || 'https';
+      const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+      const prefix = host ? `${proto}://${host}` : '';
+
       const lines = playlistContent.split('\n');
       const rewrittenLines = lines.map(line => {
         line = line.trim();
@@ -51,7 +57,7 @@ export default async function handler(req, res) {
         if (!line.startsWith('http://') && !line.startsWith('https://')) {
           absoluteSegmentUrl = baseUrl + line;
         }
-        return `/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
+        return `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
       });
 
       const modifiedBody = rewrittenLines.join('\n');
@@ -62,15 +68,17 @@ export default async function handler(req, res) {
       const buffer = await upstreamRes.arrayBuffer();
       const contentType = upstreamRes.headers.get('content-type') || (targetStreamUrl.includes('.jpg') ? 'video/mp2t' : 'video/mp2t');
       res.setHeader('Content-Type', contentType);
+      res.setHeader('Accept-Ranges', 'bytes');
       
-      if (upstreamRes.headers.get('content-range')) {
-        res.setHeader('Content-Range', upstreamRes.headers.get('content-range'));
+      const contentRange = upstreamRes.headers.get('content-range');
+      if (contentRange) {
+        res.setHeader('Content-Range', contentRange);
       }
-      if (upstreamRes.headers.get('accept-ranges')) {
-        res.setHeader('Accept-Ranges', upstreamRes.headers.get('accept-ranges'));
-      }
+      
+      const nodeBuf = Buffer.from(buffer);
+      res.setHeader('Content-Length', nodeBuf.length);
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.status(upstreamRes.status).send(Buffer.from(buffer));
+      return res.status(upstreamRes.status).send(nodeBuf);
     }
   } catch (err) {
     return res.status(502).send('Stream Proxy Error: ' + err.message);

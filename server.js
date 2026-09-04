@@ -108,7 +108,18 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const isM3u8 = targetStreamUrl.includes('.m3u8');
-      const response = await fetchUrl(targetStreamUrl, {}, null, !isM3u8, req.headers.range);
+      let pRef = 'https://megavid.buzz/';
+      let pOrig = 'https://megavid.buzz';
+      if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
+        pRef = 'https://zokoanime.video/';
+        pOrig = 'https://zokoanime.video';
+      }
+      const pHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': pRef,
+        'Origin': pOrig
+      };
+      const response = await fetchUrl(targetStreamUrl, pHeaders, null, !isM3u8, req.headers.range);
       
       const upstreamHeaders = response.headers;
       const resHeaders = {
