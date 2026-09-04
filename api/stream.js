@@ -14,10 +14,23 @@ export default async function handler(req, res) {
 
   try {
     const isM3u8 = targetStreamUrl.includes('.m3u8');
+    
+    // Dynamic referrer injection based on host domain
+    let referer = 'https://megavid.buzz/';
+    let origin = 'https://megavid.buzz';
+
+    if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
+      referer = 'https://zokoanime.video/';
+      origin = 'https://zokoanime.video';
+    } else if (targetStreamUrl.includes('megavid.buzz')) {
+      referer = 'https://megavid.buzz/';
+      origin = 'https://megavid.buzz';
+    }
+
     const headers = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Referer': 'https://megavid.buzz/',
-      'Origin': 'https://megavid.buzz',
+      'Referer': referer,
+      'Origin': origin,
       'Accept': '*/*'
     };
 

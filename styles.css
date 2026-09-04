@@ -1389,3 +1389,32 @@ body {
   color: #60a5fa;
   font-weight: 800;
 }
+
+/* Server Toggle Pill - iOS 9 Safe */
+.server-toggle-pill {
+  display: -webkit-inline-flex;
+  display: inline-flex;
+  background: #131a26;
+  border-radius: 9999px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  margin-right: 12px;
+  margin-bottom: 6px;
+}
+
+.server-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.server-btn.active {
+  background: #2d68ff;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(45, 104, 255, 0.4);
+}

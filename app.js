@@ -8,6 +8,7 @@ var state = {
   selectedAnime: null,
   currentEpisode: 1,
   audioType: 'sub',
+  currentServer: 'megavid',
   episodesSortAsc: true,
   currentChunk: 0,
   chunkSize: 24,
@@ -533,7 +534,7 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
   state.currentEpisode = episode;
   saveContinueWatching(malId, episode);
 
-  var sourceApiUrl = API_BASE + '/api/source?id=' + malId + '&ep=' + episode + '&type=' + state.audioType;
+  var sourceApiUrl = API_BASE + '/api/source?id=' + malId + '&ep=' + episode + '&type=' + state.audioType + '&server=' + state.currentServer;
   httpGet(sourceApiUrl, function(err, data) {
     if (!err && data && data.status === 'ok' && data.streamUrl) {
       var streamUrl = data.streamUrl;
@@ -543,9 +544,9 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
         streamUrl = streamUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
       }
 
-      // Route megavid.buzz/vid/ through stream proxy (injects Referer header) to guarantee 200 OK
+      // Route streams requiring specific Referer (megavid.buzz/vid/ or aniwatchtv.uk) through proxy
       var playbackUrl = streamUrl;
-      if (streamUrl.indexOf('megavid.buzz/vid/') !== -1) {
+      if (streamUrl.indexOf('megavid.buzz/vid/') !== -1 || streamUrl.indexOf('aniwatchtv.uk') !== -1 || streamUrl.indexOf('zokoanime') !== -1) {
         playbackUrl = API_BASE + '/api/stream?url=' + encodeURIComponent(streamUrl);
       }
 
