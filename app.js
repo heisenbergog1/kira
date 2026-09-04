@@ -1012,15 +1012,42 @@ function setupEvents() {
     };
   }
 
+  var serverBtns = document.querySelectorAll('.server-btn');
+  for (var s = 0; s < serverBtns.length; s++) {
+    (function(btn) {
+      var serverHandler = function(e) {
+        if (e && e.preventDefault && e.type === 'touchend') e.preventDefault();
+        for (var k = 0; k < serverBtns.length; k++) { serverBtns[k].className = 'server-btn'; }
+        btn.className = 'server-btn active';
+        state.currentServer = btn.getAttribute('data-server');
+        var serverName = state.currentServer === 'hianime' ? 'HiAnime' : 'Megavid';
+        showToast('Server: ' + serverName);
+        if (state.selectedAnime && state.currentEpisode) {
+          var malId = state.selectedAnime.idMal || state.selectedAnime.id;
+          playEpisodeDirect(malId, state.currentEpisode, encodeURIComponent('Episode ' + state.currentEpisode));
+        }
+      };
+      btn.onclick = serverHandler;
+      btn.ontouchend = serverHandler;
+    })(serverBtns[s]);
+  }
+
   var audioBtns = document.querySelectorAll('.audio-btn');
   for (var a = 0; a < audioBtns.length; a++) {
     (function(btn) {
-      btn.onclick = function() {
+      var audioHandler = function(e) {
+        if (e && e.preventDefault && e.type === 'touchend') e.preventDefault();
         for (var k = 0; k < audioBtns.length; k++) { audioBtns[k].className = 'audio-btn'; }
         btn.className = 'audio-btn active';
         state.audioType = btn.getAttribute('data-type');
         showToast('Audio set to ' + state.audioType.toUpperCase());
+        if (state.selectedAnime && state.currentEpisode) {
+          var malId = state.selectedAnime.idMal || state.selectedAnime.id;
+          playEpisodeDirect(malId, state.currentEpisode, encodeURIComponent('Episode ' + state.currentEpisode));
+        }
       };
+      btn.onclick = audioHandler;
+      btn.ontouchend = audioHandler;
     })(audioBtns[a]);
   }
 
