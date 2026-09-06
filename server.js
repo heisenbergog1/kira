@@ -84,6 +84,145 @@ function resolveDirectM3u8(sourceUrl) {
   return sourceUrl;
 }
 
+function transformKitsuItem(item, mappingsDict, explicitMalId) {
+  if (!item) return null;
+  const attr = item.attributes || {};
+  const kitsuId = item.id;
+
+  let malId = explicitMalId;
+  if (!malId && item.relationships && item.relationships.mappings && item.relationships.mappings.data) {
+    for (const m of item.relationships.mappings.data) {
+      if (mappingsDict[m.id]) {
+        malId = mappingsDict[m.id];
+        break;
+      }
+    }
+  }
+
+  const numericMalId = parseInt(malId || kitsuId, 10) || 0;
+  const titles = attr.titles || {};
+  const poster = attr.posterImage || {};
+  const cover = attr.coverImage || {};
+
+  const posterUrl = poster.large || poster.original || poster.medium || '';
+  const coverUrl = cover.large || cover.original || posterUrl;
+
+  let year = null;
+  if (attr.startDate && attr.startDate.length >= 4) {
+    const y = parseInt(attr.startDate.slice(0, 4), 10);
+    if (!isNaN(y)) year = y;
+  }
+
+  let avgScore = null;
+  if (attr.averageRating) {
+    const s = Math.round(parseFloat(attr.averageRating));
+    if (!isNaN(s)) avgScore = s;
+  }
+
+  return {
+    id: parseInt(kitsuId, 10) || numericMalId,
+    idMal: numericMalId,
+    title: {
+      romaji: attr.canonicalTitle || titles.en_jp || '',
+      english: titles.en || titles.en_us || attr.canonicalTitle || '',
+      native: titles.ja_jp || ''
+    },
+    description: attr.synopsis || '',
+    episodes: attr.episodeCount || 12,
+    nextAiringEpisode: null,
+    duration: attr.episodeLength || 24,
+    seasonYear: year,
+    averageScore: avgScore,
+    genres: [],
+    bannerImage: coverUrl,
+    coverImage: {
+      extraLarge: poster.original || posterUrl,
+      large: poster.large || posterUrl,
+      medium: poster.medium || posterUrl
+    },
+    streamingEpisodes: [],
+    characters: { edges: [] }
+  };
+}
+
+async function fetchKitsuFallback(id, q, type, page = 1) {
+  try {
+    if (id) {
+      const params = new URLSearchParams({
+        'filter[external_site]': 'myanimelist/anime',
+        'filter[external_id]': String(id),
+        'include': 'item'
+      });
+      const url = `https://kitsu.io/api/edge/mappings?${params.toString()}`;
+      const response = await fetchUrl(url, { 'Accept': 'application/vnd.api+json' });
+      if (response.status === 200) {
+        const data = JSON.parse(response.body);
+        if (data.included && data.included.length > 0) {
+          const anime = data.included[0];
+          return {
+            data: {
+              Media: transformKitsuItem(anime, {}, parseInt(id, 10))
+            }
+          };
+        }
+      }
+    }
+
+    const queryParams = new URLSearchParams({
+      'page[limit]': '20',
+      'page[offset]': String((page - 1) * 20),
+      'include': 'mappings'
+    });
+
+    let endpoint = 'https://kitsu.io/api/edge/anime';
+    if (q) {
+      queryParams.set('filter[text]', q);
+    } else {
+      if (type === 'top_airing') {
+        queryParams.set('filter[status]', 'current');
+        queryParams.set('sort', '-userCount');
+      } else if (type === 'popular') {
+        queryParams.set('sort', '-userCount');
+      } else if (type === 'movies') {
+        queryParams.set('filter[subtype]', 'movie');
+        queryParams.set('sort', '-userCount');
+      } else {
+        queryParams.set('sort', '-userCount');
+      }
+    }
+
+    const kitsuUrl = `${endpoint}?${queryParams.toString()}`;
+    const response = await fetchUrl(kitsuUrl, { 'Accept': 'application/vnd.api+json' });
+    if (response.status === 200) {
+      const data = JSON.parse(response.body);
+      const mappingsDict = {};
+      if (Array.isArray(data.included)) {
+        for (const inc of data.included) {
+          if (inc.type === 'mappings' && inc.attributes && inc.attributes.externalSite === 'myanimelist/anime') {
+            mappingsDict[inc.id] = inc.attributes.externalId;
+          }
+        }
+      }
+
+      const mediaList = (data.data || [])
+        .map(item => transformKitsuItem(item, mappingsDict))
+        .filter(Boolean);
+
+      return {
+        data: {
+          Page: {
+            media: mediaList
+          }
+        }
+      };
+    }
+  } catch (err) {
+    console.error('Kitsu fallback error:', err);
+  }
+
+  return { data: { Page: { media: [] } } };
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
@@ -401,14 +540,27 @@ const server = http.createServer(async (req, res) => {
       );
 
       if (response.status === 200) {
-        cache.set(cacheKey, { time: Date.now(), data: response.body });
+        try {
+          const parsedData = JSON.parse(response.body);
+          if (parsedData && parsedData.data && (parsedData.data.Page || parsedData.data.Media)) {
+            cache.set(cacheKey, { time: Date.now(), data: response.body });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(response.body);
+            return;
+          }
+        } catch (e) {}
       }
 
-      res.writeHead(response.status, { 'Content-Type': 'application/json' });
-      res.end(response.body);
+      // If AniList returns non-200 or is down, fall back to Kitsu
+      const fallbackData = await fetchKitsuFallback(malId, searchQuery, queryType, parseInt(page, 10) || 1);
+      const fallbackJson = JSON.stringify(fallbackData);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(fallbackJson);
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      const fallbackData = await fetchKitsuFallback(malId, searchQuery, queryType, parseInt(page, 10) || 1);
+      const fallbackJson = JSON.stringify(fallbackData);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(fallbackJson);
     }
     return;
   }
