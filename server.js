@@ -247,7 +247,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const isM3u8 = targetStreamUrl.includes('.m3u8');
+      const isSegment = targetStreamUrl.includes('.ts') || targetStreamUrl.includes('.jpg') || targetStreamUrl.includes('seg-') || targetStreamUrl.includes('.vtt') || targetStreamUrl.includes('.key');
       let pRef = 'https://megavid.buzz/';
       let pOrig = 'https://megavid.buzz';
       if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
@@ -259,9 +259,11 @@ const server = http.createServer(async (req, res) => {
         'Referer': pRef,
         'Origin': pOrig
       };
-      const response = await fetchUrl(targetStreamUrl, pHeaders, null, !isM3u8, req.headers.range);
+      const response = await fetchUrl(targetStreamUrl, pHeaders, null, isSegment, req.headers.range);
       
       const upstreamHeaders = response.headers;
+      const upstreamContentType = upstreamHeaders['content-type'] || '';
+      const isM3u8 = !isSegment && (targetStreamUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegURL') || targetStreamUrl.includes('megavid.buzz/vid/'));
       const resHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Range, Content-Type',

@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const isM3u8 = targetStreamUrl.includes('.m3u8');
+    const isSegment = targetStreamUrl.includes('.ts') || targetStreamUrl.includes('.jpg') || targetStreamUrl.includes('seg-') || targetStreamUrl.includes('.vtt') || targetStreamUrl.includes('.key');
     
     // Dynamic referrer injection based on host domain
     let referer = 'https://megavid.buzz/';
@@ -39,6 +39,8 @@ export default async function handler(req, res) {
     }
 
     const upstreamRes = await fetch(targetStreamUrl, { headers });
+    const upstreamContentType = upstreamRes.headers.get('content-type') || '';
+    const isM3u8 = !isSegment && (targetStreamUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegURL') || targetStreamUrl.includes('megavid.buzz/vid/'));
 
     if (isM3u8) {
       const playlistContent = await upstreamRes.text();
