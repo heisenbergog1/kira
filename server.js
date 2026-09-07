@@ -69,7 +69,7 @@ function fetchUrl(targetUrl, headers = {}, postData = null, isBinary = false, ra
       });
     });
     req.on('error', reject);
-    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Request timeout')); });
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error('Request timeout')); });
     if (postData) req.write(postData);
     req.end();
   });
