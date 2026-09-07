@@ -547,11 +547,8 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
         streamUrl = streamUrl.replace('master.m3u8', 'index-f1-v1-a1.m3u8');
       }
 
-      // Route streams requiring specific Referer (megavid.buzz/vid/ or aniwatchtv.uk) through proxy
-      var playbackUrl = streamUrl;
-      if (streamUrl.indexOf('megavid.buzz/vid/') !== -1 || streamUrl.indexOf('aniwatchtv.uk') !== -1 || streamUrl.indexOf('zokoanime') !== -1) {
-        playbackUrl = API_BASE + '/api/stream?url=' + encodeURIComponent(streamUrl);
-      }
+      // Route all streams through stream proxy for guaranteed Referer headers, CORS, and MPEG-TS MIME types
+      var playbackUrl = API_BASE + '/api/stream?url=' + encodeURIComponent(streamUrl);
 
       state.currentStreamUrl = playbackUrl;
       if (streamUrlInput) streamUrlInput.value = playbackUrl;

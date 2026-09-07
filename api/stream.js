@@ -13,8 +13,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    const isM3u8 = targetStreamUrl.includes('.m3u8');
-    
     // Dynamic referrer injection based on host domain
     let referer = 'https://megavid.buzz/';
     let origin = 'https://megavid.buzz';
@@ -22,7 +20,10 @@ export default async function handler(req, res) {
     if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
       referer = 'https://zokoanime.video/';
       origin = 'https://zokoanime.video';
-    } else if (targetStreamUrl.includes('megavid.buzz')) {
+    } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top')) {
+      referer = 'https://megaplay.buzz/';
+      origin = 'https://megaplay.buzz';
+    } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {
       referer = 'https://megavid.buzz/';
       origin = 'https://megavid.buzz';
     }
@@ -39,6 +40,8 @@ export default async function handler(req, res) {
     }
 
     const upstreamRes = await fetch(targetStreamUrl, { headers });
+    const upstreamContentType = (upstreamRes.headers.get('content-type') || '').toLowerCase();
+    const isM3u8 = targetStreamUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegurl');
 
     if (isM3u8) {
       const playlistContent = await upstreamRes.text();

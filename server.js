@@ -247,21 +247,28 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const isM3u8 = targetStreamUrl.includes('.m3u8');
       let pRef = 'https://megavid.buzz/';
       let pOrig = 'https://megavid.buzz';
       if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
         pRef = 'https://zokoanime.video/';
         pOrig = 'https://zokoanime.video';
+      } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top')) {
+        pRef = 'https://megaplay.buzz/';
+        pOrig = 'https://megaplay.buzz';
+      } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {
+        pRef = 'https://megavid.buzz/';
+        pOrig = 'https://megavid.buzz';
       }
       const pHeaders = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': pRef,
         'Origin': pOrig
       };
-      const response = await fetchUrl(targetStreamUrl, pHeaders, null, !isM3u8, req.headers.range);
+      const response = await fetchUrl(targetStreamUrl, pHeaders, null, false, req.headers.range);
       
       const upstreamHeaders = response.headers;
+      const upstreamContentType = (upstreamHeaders['content-type'] || '').toLowerCase();
+      const isM3u8 = targetStreamUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegurl');
       const resHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Range, Content-Type',
