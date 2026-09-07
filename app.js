@@ -633,10 +633,16 @@ function renderQualityDropdown(qualities) {
     showToast('Preferred Quality: ' + label);
 
     // If currently playing, live switch quality
-    if (state.hlsPlayer && idx >= 0) {
-      state.hlsPlayer.currentLevel = idx;
-    } else if (state.hlsPlayer && idx === -1) {
-      state.hlsPlayer.currentLevel = -1;
+    if (state.hlsPlayer) {
+      if (idx === -1 || label === 'Auto') {
+        state.hlsPlayer.currentLevel = -1;
+      } else {
+        var targetLevel = idx;
+        if (state.availableQualities && state.availableQualities[idx] && state.availableQualities[idx].index !== undefined) {
+          targetLevel = state.availableQualities[idx].index;
+        }
+        state.hlsPlayer.currentLevel = targetLevel;
+      }
     } else {
       var video = document.getElementById('main-video');
       if (video && !video.paused && state.currentStreamUrl) {
@@ -690,13 +696,20 @@ function startHlsPlayback(streamUrl, tracks, isRetryProxy) {
 
       if (data && data.levels && data.levels.length > 1) {
         var hlsQualities = [];
+        var targetLevelIdx = -1;
         for (var i = 0; i < data.levels.length; i++) {
           var lvl = data.levels[i];
           var h = lvl.height ? (lvl.height + 'p') : ('Quality ' + (i + 1));
           var qUrl = (lvl.url && lvl.url.length > 0) ? lvl.url[0] : (lvl.uri || '');
           hlsQualities.push({ label: h, index: i, url: qUrl });
+          if (state.selectedQuality && state.selectedQuality !== 'Auto' && h === state.selectedQuality) {
+            targetLevelIdx = i;
+          }
         }
         renderQualityDropdown(hlsQualities);
+        if (targetLevelIdx !== -1) {
+          hls.currentLevel = targetLevelIdx;
+        }
       }
     });
 
