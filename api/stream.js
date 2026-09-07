@@ -94,11 +94,23 @@ export default async function handler(req, res) {
         res.setHeader('Cache-Control', 'public, max-age=3600');
         return res.status(upstreamRes.status).send(modifiedBody);
       } else {
-        // Media segment playlist (.ts list)
+        // Media segment playlist (.ts / .jpg list)
         const lines = playlistContent.split('\n');
         const rewrittenLines = lines.map(line => {
           line = line.trim();
-          if (!line || line.startsWith('#')) return line;
+          if (!line) return line;
+          if (line.startsWith('#')) {
+            if (line.includes('URI=')) {
+              return line.replace(/URI=["']([^"']+)["']/g, (m, u) => {
+                let abs = u;
+                if (!u.startsWith('http://') && !u.startsWith('https://')) {
+                  abs = baseUrl + u;
+                }
+                return `URI="${prefix}/api/stream?url=${encodeURIComponent(abs)}"`;
+              });
+            }
+            return line;
+          }
           let absoluteSegmentUrl = line;
           if (!line.startsWith('http://') && !line.startsWith('https://')) {
             absoluteSegmentUrl = baseUrl + line;
@@ -113,7 +125,15 @@ export default async function handler(req, res) {
       }
     } else {
       const buffer = await upstreamRes.arrayBuffer();
-      const contentType = upstreamRes.headers.get('content-type') || (targetStreamUrl.includes('.jpg') ? 'video/mp2t' : 'video/mp2t');
+      
+      // Force correct MIME type: Megavid chunks end in .jpg but are MPEG-TS video
+      let contentType = 'video/mp2t';
+      if (targetStreamUrl.includes('.vtt')) {
+        contentType = 'text/vtt';
+      } else if (targetStreamUrl.includes('.key')) {
+        contentType = 'application/octet-stream';
+      }
+      
       res.setHeader('Content-Type', contentType);
       res.setHeader('Accept-Ranges', 'bytes');
       

@@ -324,11 +324,23 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(response.status, resHeaders);
           res.end(modifiedBody);
         } else {
-          // Media segment playlist (.ts list)
+          // Media segment playlist (.ts / .jpg list)
           const lines = playlistContent.split('\n');
           const rewrittenLines = lines.map(line => {
             line = line.trim();
-            if (!line || line.startsWith('#')) return line;
+            if (!line) return line;
+            if (line.startsWith('#')) {
+              if (line.includes('URI=')) {
+                return line.replace(/URI=["']([^"']+)["']/g, (m, u) => {
+                  let abs = u;
+                  if (!u.startsWith('http://') && !u.startsWith('https://')) {
+                    abs = baseUrl + u;
+                  }
+                  return `URI="${prefix}/api/stream?url=${encodeURIComponent(abs)}"`;
+                });
+              }
+              return line;
+            }
             let absoluteSegmentUrl = line;
             if (!line.startsWith('http://') && !line.startsWith('https://')) {
               absoluteSegmentUrl = baseUrl + line;
@@ -342,6 +354,15 @@ const server = http.createServer(async (req, res) => {
           res.end(modifiedBody);
         }
       } else {
+        // Force correct MIME type for video chunks (.jpg chunks on Megavid are MPEG-TS)
+        let contentType = 'video/mp2t';
+        if (targetStreamUrl.includes('.vtt')) {
+          contentType = 'text/vtt';
+        } else if (targetStreamUrl.includes('.key')) {
+          contentType = 'application/octet-stream';
+        }
+        resHeaders['Content-Type'] = contentType;
+        
         res.writeHead(response.status, resHeaders);
         res.end(response.body);
       }
@@ -378,57 +399,176 @@ const server = http.createServer(async (req, res) => {
   // Stream Source API
   if (pathname === '/api/source') {
     const malId = parsedUrl.query.id;
+    const alId = parsedUrl.query.alId;
     const ep = parsedUrl.query.ep || '1';
     const type = (parsedUrl.query.type || 'sub').toLowerCase();
+    const serverParam = (parsedUrl.query.server || 'megavid').toLowerCase();
+    const subserverParam = (parsedUrl.query.subserver || 'auto').toLowerCase();
 
-    if (!malId) {
+    if (!malId && !alId) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing MAL ID (id)' }));
+      res.end(JSON.stringify({ error: 'Missing anime ID (id / alId)' }));
       return;
     }
 
-    const apiUrl = `https://megavid.buzz/mal/${malId}/${ep}/${type}/source`;
-    const referer = `https://megavid.buzz/mal/${malId}/${ep}/${type}`;
+    const targetId = malId || alId;
+    const targetAlId = alId || malId;
 
     try {
-      const response = await fetchUrl(apiUrl, { 'Referer': referer });
-      if (response.status !== 200) {
-        res.writeHead(response.status, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          status: 'error',
-          code: response.status,
-          message: `Stream not available for MAL ID ${malId} Ep ${ep} (${type}).`
-        }));
+      async function tryMegavidMal(id, epNum, aType) {
+        try {
+          const apiUrl = `https://megavid.buzz/mal/${id}/${epNum}/${aType}/source`;
+          const referer = `https://megavid.buzz/mal/${id}/${epNum}/${aType}`;
+          const r = await fetchUrl(apiUrl, { 'Referer': referer, 'Origin': 'https://megavid.buzz' });
+          if (r.status === 200) {
+            const d = JSON.parse(r.body);
+            if (d && d.source) {
+              const directUrl = resolveDirectM3u8(d.source);
+              return {
+                status: 'ok',
+                server: 'megavid',
+                subserver: 'mal',
+                malId: id,
+                episode: epNum,
+                type: aType,
+                streamUrl: directUrl,
+                rawSource: d.source,
+                tracks: d.tracks || [],
+                mega: d.mega || false
+              };
+            }
+          }
+        } catch (e) {}
+        return null;
+      }
+
+      async function tryAniWave(al, epNum, aType) {
+        if (!al) return null;
+        try {
+          const apiUrl = `https://megavid.buzz/aniwave/al/${al}/${epNum}/${aType}/source`;
+          const referer = `https://megavid.buzz/aniwave/al/${al}/${epNum}/${aType}`;
+          const r = await fetchUrl(apiUrl, { 'Referer': referer, 'Origin': 'https://megavid.buzz' });
+          if (r.status === 200) {
+            const d = JSON.parse(r.body);
+            if (d && d.source) {
+              const directUrl = resolveDirectM3u8(d.source);
+              return {
+                status: 'ok',
+                server: 'megavid',
+                subserver: 'aniwave',
+                alId: al,
+                episode: epNum,
+                type: aType,
+                streamUrl: directUrl,
+                rawSource: d.source,
+                tracks: d.tracks || [],
+                mega: d.mega || false
+              };
+            }
+          }
+        } catch (e) {}
+        return null;
+      }
+
+      async function tryAni(al, epNum, aType) {
+        if (!al) return null;
+        try {
+          const apiUrl = `https://megavid.buzz/ani/${al}/${epNum}/${aType}/source`;
+          const referer = `https://megavid.buzz/ani/${al}/${epNum}/${aType}`;
+          const r = await fetchUrl(apiUrl, { 'Referer': referer, 'Origin': 'https://megavid.buzz' });
+          if (r.status === 200) {
+            const d = JSON.parse(r.body);
+            if (d && d.source) {
+              const directUrl = resolveDirectM3u8(d.source);
+              return {
+                status: 'ok',
+                server: 'megavid',
+                subserver: 'ani',
+                alId: al,
+                episode: epNum,
+                type: aType,
+                streamUrl: directUrl,
+                rawSource: d.source,
+                tracks: d.tracks || [],
+                mega: d.mega || false
+              };
+            }
+          }
+        } catch (e) {}
+        return null;
+      }
+
+      async function tryMegavidSmart(id, al, epNum, aType, sub) {
+        if (sub === 'aniwave') {
+          let res = await tryAniWave(al || id, epNum, aType);
+          if (!res) res = await tryAni(al || id, epNum, aType);
+          if (!res) res = await tryMegavidMal(id, epNum, aType);
+          return res;
+        }
+        if (sub === 'ani') {
+          let res = await tryAni(al || id, epNum, aType);
+          if (!res) res = await tryAniWave(al || id, epNum, aType);
+          if (!res) res = await tryMegavidMal(id, epNum, aType);
+          return res;
+        }
+        if (sub === 'megavid' || sub === 'mal') {
+          let res = await tryMegavidMal(id, epNum, aType);
+          if (!res) res = await tryAniWave(al || id, epNum, aType);
+          if (!res) res = await tryAni(al || id, epNum, aType);
+          return res;
+        }
+        // Auto: MAL -> AniWave -> Ani
+        let res = await tryMegavidMal(id, epNum, aType);
+        if (!res) res = await tryAniWave(al || id, epNum, aType);
+        if (!res) res = await tryAni(al || id, epNum, aType);
+        return res;
+      }
+
+      async function tryHiAnime(id, epNum, aType) {
+        try {
+          const zokoUrl = `https://zokoanime.video/stream/mal/${id}/${epNum}/${aType}?autostart=false&asi=0`;
+          const zokoRes = await fetchUrl(zokoUrl, { 'Referer': 'https://hianimes.se/' });
+          if (zokoRes.status === 200 && zokoRes.body.includes('window.__P="')) {
+            const blob = zokoRes.body.split('window.__P="')[1].split('"')[0];
+            const payload = deobfuscateZoko(blob);
+            if (payload && payload.src) {
+              return {
+                status: 'ok',
+                server: 'hianime',
+                malId: id,
+                episode: epNum,
+                type: aType,
+                streamUrl: payload.src,
+                subtitles: payload.subtitles || [],
+                skip: payload.skip || null
+              };
+            }
+          }
+        } catch (e) {}
+        return null;
+      }
+
+      let result = null;
+      if (serverParam === 'hianime') {
+        result = await tryHiAnime(targetId, ep, type);
+        if (!result) result = await tryMegavidSmart(targetId, targetAlId, ep, type, subserverParam);
+      } else {
+        result = await tryMegavidSmart(targetId, targetAlId, ep, type, subserverParam);
+        if (!result) result = await tryHiAnime(targetId, ep, type);
+      }
+
+      if (result) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
         return;
       }
 
-      let data;
-      try {
-        data = JSON.parse(response.body);
-      } catch (e) {
-        data = { status: 'error', raw: response.body };
-      }
-
-      if (data && data.source) {
-        const directUrl = resolveDirectM3u8(data.source);
-        const proxiedStreamUrl = `/api/stream?url=${encodeURIComponent(directUrl)}`;
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          status: 'ok',
-          malId,
-          episode: ep,
-          type,
-          streamUrl: directUrl,
-          proxiedUrl: proxiedStreamUrl,
-          rawSource: data.source,
-          tracks: data.tracks || [],
-          mega: data.mega || false
-        }));
-      } else {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(data));
-      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'error',
+        code: 404,
+        message: `Stream not available for ID ${targetId} Ep ${ep} (${type}).`
+      }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));

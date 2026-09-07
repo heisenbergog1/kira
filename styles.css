@@ -805,6 +805,50 @@ body {
   color: #ffffff;
 }
 
+.server-toggle-pill,
+.sub-server-pill {
+  display: -webkit-flex;
+  display: flex;
+  background: #131a26;
+  border-radius: 9999px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-left: 8px;
+}
+
+.server-btn,
+.sub-server-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  cursor: pointer;
+  -webkit-transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sub-server-btn {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+
+.server-btn.active {
+  background: #2d68ff;
+  color: #ffffff;
+}
+
+.sub-server-btn.active {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.sub-server-pill.hidden {
+  display: none !important;
+}
+
 .episodes-count-meta {
   display: -webkit-flex;
   display: flex;

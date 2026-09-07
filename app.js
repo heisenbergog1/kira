@@ -9,6 +9,7 @@ var state = {
   currentEpisode: 1,
   audioType: 'sub',
   currentServer: 'megavid',
+  currentSubServer: 'auto',
   episodesSortAsc: true,
   currentChunk: 0,
   chunkSize: 24,
@@ -534,7 +535,9 @@ function playEpisodeDirect(malId, episode, encodedTitle) {
   state.currentEpisode = episode;
   saveContinueWatching(malId, episode);
 
-  var sourceApiUrl = API_BASE + '/api/source?id=' + malId + '&ep=' + episode + '&type=' + state.audioType + '&server=' + state.currentServer;
+  var alId = state.selectedAnime ? (state.selectedAnime.id || state.selectedAnime.idMal) : malId;
+  var subServerParam = state.currentSubServer || 'auto';
+  var sourceApiUrl = API_BASE + '/api/source?id=' + malId + '&alId=' + alId + '&ep=' + episode + '&type=' + state.audioType + '&server=' + state.currentServer + '&subserver=' + subServerParam;
   httpGet(sourceApiUrl, function(err, data) {
     if (!err && data && data.status === 'ok' && data.streamUrl) {
       var streamUrl = data.streamUrl;
@@ -1021,6 +1024,14 @@ function setupEvents() {
         for (var k = 0; k < serverBtns.length; k++) { serverBtns[k].className = 'server-btn'; }
         btn.className = 'server-btn active';
         state.currentServer = btn.getAttribute('data-server');
+        var subPill = document.getElementById('megavid-sub-servers');
+        if (subPill) {
+          if (state.currentServer === 'megavid') {
+            subPill.className = 'sub-server-pill';
+          } else {
+            subPill.className = 'sub-server-pill hidden';
+          }
+        }
         var serverName = state.currentServer === 'hianime' ? 'HiAnime' : 'Megavid';
         showToast('Server: ' + serverName);
         if (state.selectedAnime && state.currentEpisode) {
@@ -1031,6 +1042,25 @@ function setupEvents() {
       btn.onclick = serverHandler;
       btn.ontouchend = serverHandler;
     })(serverBtns[s]);
+  }
+
+  var subServerBtns = document.querySelectorAll('.sub-server-btn');
+  for (var sb = 0; sb < subServerBtns.length; sb++) {
+    (function(btn) {
+      var subServerHandler = function(e) {
+        if (e && e.preventDefault && e.type === 'touchend') e.preventDefault();
+        for (var k = 0; k < subServerBtns.length; k++) { subServerBtns[k].className = 'sub-server-btn'; }
+        btn.className = 'sub-server-btn active';
+        state.currentSubServer = btn.getAttribute('data-subserver');
+        showToast('Megavid: ' + btn.textContent);
+        if (state.selectedAnime && state.currentEpisode) {
+          var malId = state.selectedAnime.idMal || state.selectedAnime.id;
+          playEpisodeDirect(malId, state.currentEpisode, encodeURIComponent('Episode ' + state.currentEpisode));
+        }
+      };
+      btn.onclick = subServerHandler;
+      btn.ontouchend = subServerHandler;
+    })(subServerBtns[sb]);
   }
 
   var audioBtns = document.querySelectorAll('.audio-btn');
