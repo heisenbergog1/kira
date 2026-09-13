@@ -30,6 +30,24 @@ const MIME_TYPES = {
   '.ts': 'video/mp2t'
 };
 
+const MEGAPLAY_CDN_KEY = Buffer.from("MpCdnT0k3n!9f2K#xQ7vL5mR8wN1pY4s", 'utf8');
+
+function attachMegaPlayCdnToken(url) {
+  if (!url || typeof url !== 'string' || url.includes('token=')) return url;
+  const match = url.match(/\/([a-f0-9]{32})\/([a-f0-9]{32})\//i);
+  if (!match) return url;
+  const pathPair = `${match[1].toLowerCase()}/${match[2].toLowerCase()}`;
+  const expiry = Math.floor(Date.now() / 1000) + 86400;
+  const message = `${expiry}|${pathPair}`;
+  const hmac = crypto.createHmac('sha256', MEGAPLAY_CDN_KEY);
+  hmac.update(Buffer.from(message, 'utf8'));
+  const b64Msg = Buffer.from(message, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const b64Sig = hmac.digest().toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const token = `${b64Msg}.${b64Sig}`;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
 function fetchUrl(targetUrl, headers = {}, postData = null, isBinary = false, range = null) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(targetUrl);
@@ -250,12 +268,14 @@ const server = http.createServer(async (req, res) => {
     try {
       let pRef = 'https://megavid.buzz/';
       let pOrig = 'https://megavid.buzz';
+      let actualStreamUrl = targetStreamUrl;
       if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
         pRef = 'https://zokoanime.video/';
         pOrig = 'https://zokoanime.video';
-      } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top')) {
+      } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('quavex.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top') || targetStreamUrl.includes('akirax.buzz')) {
         pRef = 'https://megaplay.buzz/';
         pOrig = 'https://megaplay.buzz';
+        actualStreamUrl = attachMegaPlayCdnToken(targetStreamUrl);
       } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {
         pRef = 'https://megavid.buzz/';
         pOrig = 'https://megavid.buzz';
@@ -265,7 +285,7 @@ const server = http.createServer(async (req, res) => {
         'Referer': pRef,
         'Origin': pOrig
       };
-      const response = await fetchUrl(targetStreamUrl, pHeaders, null, false, req.headers.range);
+      const response = await fetchUrl(actualStreamUrl, pHeaders, null, false, req.headers.range);
       
       const upstreamHeaders = response.headers;
       const upstreamContentType = (upstreamHeaders['content-type'] || '').toLowerCase();
@@ -621,7 +641,7 @@ const server = http.createServer(async (req, res) => {
               malId: id,
               episode: epNum,
               type: aType,
-              streamUrl: resolveDirectM3u8(streamUrl),
+              streamUrl: resolveDirectM3u8(attachMegaPlayCdnToken(streamUrl)),
               tracks: sourcesData.tracks || [],
               intro: sourcesData.intro || null,
               outro: sourcesData.outro || null

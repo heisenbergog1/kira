@@ -212,6 +212,24 @@ function decryptMegaPlay(encString) {
   }
 }
 
+const MEGAPLAY_CDN_KEY = Buffer.from("MpCdnT0k3n!9f2K#xQ7vL5mR8wN1pY4s", 'utf8');
+
+function attachMegaPlayCdnToken(url) {
+  if (!url || typeof url !== 'string' || url.includes('token=')) return url;
+  const match = url.match(/\/([a-f0-9]{32})\/([a-f0-9]{32})\//i);
+  if (!match) return url;
+  const pathPair = `${match[1].toLowerCase()}/${match[2].toLowerCase()}`;
+  const expiry = Math.floor(Date.now() / 1000) + 86400;
+  const message = `${expiry}|${pathPair}`;
+  const hmac = crypto.createHmac('sha256', MEGAPLAY_CDN_KEY);
+  hmac.update(Buffer.from(message, 'utf8'));
+  const b64Msg = Buffer.from(message, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const b64Sig = hmac.digest().toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const token = `${b64Msg}.${b64Sig}`;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
 async function fetchMegaPlaySource(id, ep, audioType) {
   try {
     const embedUrl = `https://megaplay.buzz/stream/mal/${id}/${ep}/${audioType}?autostart=false`;
@@ -268,7 +286,7 @@ async function fetchMegaPlaySource(id, ep, audioType) {
         malId: id,
         episode: ep,
         type: audioType,
-        streamUrl: normalizeM3u8Url(streamUrl),
+        streamUrl: normalizeM3u8Url(attachMegaPlayCdnToken(streamUrl)),
         tracks: sourcesData.tracks || [],
         intro: sourcesData.intro || null,
         outro: sourcesData.outro || null

@@ -1,3 +1,23 @@
+import crypto from 'crypto';
+
+const MEGAPLAY_CDN_KEY = Buffer.from("MpCdnT0k3n!9f2K#xQ7vL5mR8wN1pY4s", 'utf8');
+
+function attachMegaPlayCdnToken(url) {
+  if (!url || typeof url !== 'string' || url.includes('token=')) return url;
+  const match = url.match(/\/([a-f0-9]{32})\/([a-f0-9]{32})\//i);
+  if (!match) return url;
+  const pathPair = `${match[1].toLowerCase()}/${match[2].toLowerCase()}`;
+  const expiry = Math.floor(Date.now() / 1000) + 86400;
+  const message = `${expiry}|${pathPair}`;
+  const hmac = crypto.createHmac('sha256', MEGAPLAY_CDN_KEY);
+  hmac.update(Buffer.from(message, 'utf8'));
+  const b64Msg = Buffer.from(message, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const b64Sig = hmac.digest().toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const token = `${b64Msg}.${b64Sig}`;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -7,7 +27,7 @@ export default async function handler(req, res) {
     return res.status(204).end();
   }
 
-  const { url: targetStreamUrl } = req.query;
+  let { url: targetStreamUrl } = req.query;
   if (!targetStreamUrl) {
     return res.status(400).send('Missing url');
   }
@@ -20,9 +40,10 @@ export default async function handler(req, res) {
     if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
       referer = 'https://zokoanime.video/';
       origin = 'https://zokoanime.video';
-    } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top')) {
+    } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('quavex.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top') || targetStreamUrl.includes('akirax.buzz')) {
       referer = 'https://megaplay.buzz/';
       origin = 'https://megaplay.buzz';
+      targetStreamUrl = attachMegaPlayCdnToken(targetStreamUrl);
     } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {
       referer = 'https://megavid.buzz/';
       origin = 'https://megavid.buzz';
@@ -69,6 +90,9 @@ export default async function handler(req, res) {
             let absoluteSegmentUrl = line;
             if (!line.startsWith('http://') && !line.startsWith('https://')) {
               absoluteSegmentUrl = baseUrl + line;
+            }
+            if (absoluteSegmentUrl.includes('nexabloom.top') || absoluteSegmentUrl.includes('megaplay.buzz')) {
+              absoluteSegmentUrl = attachMegaPlayCdnToken(absoluteSegmentUrl);
             }
             const bwMatch = currentInf.match(/BANDWIDTH=(\d+)/);
             const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
