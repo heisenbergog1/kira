@@ -335,7 +335,7 @@ const server = http.createServer(async (req, res) => {
 
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
-            if (!line) continue;
+            if (!line || line.startsWith('#EXT-X-I-FRAME-STREAM-INF')) continue;
             if (line.startsWith('#EXT-X-STREAM-INF')) {
               currentInf = line;
             } else if (currentInf) {
@@ -355,7 +355,21 @@ const server = http.createServer(async (req, res) => {
               });
               currentInf = null;
             } else {
-              headerLines.push(line);
+              if (line.includes('URI=')) {
+                let rewritten = line.replace(/URI=["']([^"']+)["']/g, (m, u) => {
+                  let abs = u;
+                  if (!u.startsWith('http://') && !u.startsWith('https://')) {
+                    abs = baseUrl + u;
+                  }
+                  if (abs.includes('.top') || abs.includes('megaplay.buzz')) {
+                    abs = attachMegaPlayCdnToken(abs);
+                  }
+                  return `URI="${prefix}/api/stream?url=${encodeURIComponent(abs)}"`;
+                });
+                headerLines.push(rewritten);
+              } else {
+                headerLines.push(line);
+              }
             }
           }
 
