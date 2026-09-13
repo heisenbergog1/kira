@@ -1,5 +1,6 @@
 import http from 'http';
 import https from 'https';
+import crypto from 'crypto';
 import url from 'url';
 import fs from 'fs';
 import path from 'path';
@@ -252,7 +253,7 @@ const server = http.createServer(async (req, res) => {
       if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
         pRef = 'https://zokoanime.video/';
         pOrig = 'https://zokoanime.video';
-      } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top')) {
+      } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top')) {
         pRef = 'https://megaplay.buzz/';
         pOrig = 'https://megaplay.buzz';
       } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {
@@ -555,13 +556,94 @@ const server = http.createServer(async (req, res) => {
         return null;
       }
 
+      const MEGAPLAY_KEY = Buffer.alloc(32);
+      MEGAPLAY_KEY.set(Buffer.from("i?LMTAx0Q6,:}50U", 'utf8').subarray(0, 32));
+      const MEGAPLAY_IV = Buffer.from("W0;27ToaUpl_P%'c", 'utf8');
+
+      function decryptMegaPlay(encString) {
+        try {
+          let b64 = encString.replace(/-/g, '+').replace(/_/g, '/');
+          while (b64.length % 4 !== 0) b64 += '=';
+          const cipherBuffer = Buffer.from(b64, 'base64');
+          const decipher = crypto.createDecipheriv('aes-256-cbc', MEGAPLAY_KEY, MEGAPLAY_IV);
+          let decrypted = decipher.update(cipherBuffer);
+          decrypted = Buffer.concat([decrypted, decipher.final()]);
+          return JSON.parse(decrypted.toString('utf8'));
+        } catch (e) {
+          return null;
+        }
+      }
+
+      async function tryMegaPlay(id, epNum, aType) {
+        try {
+          const embedUrl = `https://megaplay.buzz/stream/mal/${id}/${epNum}/${aType}?autostart=false`;
+          const embedRes = await fetchUrl(embedUrl, {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://anikoto.cz/'
+          });
+          if (embedRes.status !== 200) return null;
+
+          const html = embedRes.body;
+          let fileId = null;
+          const matchTitle = html.match(/File\s+(\d+)/i);
+          if (matchTitle) {
+            fileId = matchTitle[1];
+          } else {
+            const matchData = html.match(/data-(?:realid|id|ep-id)=["'](\d+)["']/i);
+            if (matchData) fileId = matchData[1];
+          }
+
+          if (!fileId) return null;
+
+          const sourcesUrl = `https://megaplay.buzz/stream/getSources?id=${fileId}&id=${fileId}`;
+          const sourcesRes = await fetchUrl(sourcesUrl, {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': embedUrl,
+            'X-Requested-With': 'XMLHttpRequest'
+          });
+
+          if (sourcesRes.status !== 200) return null;
+
+          const sourcesData = JSON.parse(sourcesRes.body);
+          let streamUrl = null;
+
+          if (sourcesData.enc) {
+            const decrypted = decryptMegaPlay(sourcesData.enc);
+            if (decrypted) streamUrl = decrypted.file || decrypted.url || null;
+          } else if (sourcesData.file || sourcesData.source) {
+            streamUrl = sourcesData.file || sourcesData.source;
+          }
+
+          if (streamUrl) {
+            return {
+              status: 'ok',
+              server: 'megaplay',
+              malId: id,
+              episode: epNum,
+              type: aType,
+              streamUrl: resolveDirectM3u8(streamUrl),
+              tracks: sourcesData.tracks || [],
+              intro: sourcesData.intro || null,
+              outro: sourcesData.outro || null
+            };
+          }
+        } catch (e) {}
+        return null;
+      }
+
       let result = null;
-      if (serverParam === 'hianime') {
+      if (serverParam === 'megaplay' || serverParam === 'anikoto') {
+        result = await tryMegaPlay(targetId, ep, type);
+        if (!result) result = await tryMegavidSmart(targetId, targetAlId, ep, type, subserverParam);
+        if (!result) result = await tryHiAnime(targetId, ep, type);
+      } else if (serverParam === 'hianime') {
         result = await tryHiAnime(targetId, ep, type);
         if (!result) result = await tryMegavidSmart(targetId, targetAlId, ep, type, subserverParam);
+        if (!result) result = await tryMegaPlay(targetId, ep, type);
       } else {
         result = await tryMegavidSmart(targetId, targetAlId, ep, type, subserverParam);
         if (!result) result = await tryHiAnime(targetId, ep, type);
+        if (!result) result = await tryMegaPlay(targetId, ep, type);
       }
 
       if (result) {

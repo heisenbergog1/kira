@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
       referer = 'https://zokoanime.video/';
       origin = 'https://zokoanime.video';
-    } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top')) {
+    } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top')) {
       referer = 'https://megaplay.buzz/';
       origin = 'https://megaplay.buzz';
     } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {

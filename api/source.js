@@ -1,4 +1,5 @@
 import https from 'https';
+import crypto from 'crypto';
 
 const OBF_KEY = 'otaku-embed-v1';
 
@@ -193,6 +194,92 @@ async function fetchHiAnimeSource(id, ep, audioType) {
   return null;
 }
 
+const MEGAPLAY_KEY = Buffer.alloc(32);
+MEGAPLAY_KEY.set(Buffer.from("i?LMTAx0Q6,:}50U", 'utf8').subarray(0, 32));
+const MEGAPLAY_IV = Buffer.from("W0;27ToaUpl_P%'c", 'utf8');
+
+function decryptMegaPlay(encString) {
+  try {
+    let b64 = encString.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4 !== 0) b64 += '=';
+    const cipherBuffer = Buffer.from(b64, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', MEGAPLAY_KEY, MEGAPLAY_IV);
+    let decrypted = decipher.update(cipherBuffer);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchMegaPlaySource(id, ep, audioType) {
+  try {
+    const embedUrl = `https://megaplay.buzz/stream/mal/${id}/${ep}/${audioType}?autostart=false`;
+    const embedRes = await fetch(embedUrl, {
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://anikoto.cz/',
+        'Accept': '*/*'
+      }
+    });
+
+    if (!embedRes.ok) return null;
+
+    const html = await embedRes.text();
+    let fileId = null;
+    const matchTitle = html.match(/File\s+(\d+)/i);
+    if (matchTitle) {
+      fileId = matchTitle[1];
+    } else {
+      const matchData = html.match(/data-(?:realid|id|ep-id)=["'](\d+)["']/i);
+      if (matchData) fileId = matchData[1];
+    }
+
+    if (!fileId) return null;
+
+    const sourcesUrl = `https://megaplay.buzz/stream/getSources?id=${fileId}&id=${fileId}`;
+    const sourcesRes = await fetch(sourcesUrl, {
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': embedUrl,
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!sourcesRes.ok) return null;
+
+    const sourcesData = await sourcesRes.json();
+    let streamUrl = null;
+
+    if (sourcesData.enc) {
+      const decrypted = decryptMegaPlay(sourcesData.enc);
+      if (decrypted) streamUrl = decrypted.file || decrypted.url || null;
+    } else if (sourcesData.file || sourcesData.source) {
+      streamUrl = sourcesData.file || sourcesData.source;
+    }
+
+    if (streamUrl) {
+      return {
+        status: 'ok',
+        server: 'megaplay',
+        malId: id,
+        episode: ep,
+        type: audioType,
+        streamUrl: normalizeM3u8Url(streamUrl),
+        tracks: sourcesData.tracks || [],
+        intro: sourcesData.intro || null,
+        outro: sourcesData.outro || null
+      };
+    }
+  } catch (err) {
+    return null;
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -215,14 +302,21 @@ export default async function handler(req, res) {
 
   try {
     let result = null;
-    if (selectedServer === 'hianime') {
-      result = await fetchHiAnimeSource(targetId, ep, audioType);
-      // Fallback to megavid if hianime missing
+    if (selectedServer === 'megaplay' || selectedServer === 'anikoto') {
+      result = await fetchMegaPlaySource(targetId, ep, audioType);
+      // Fallback cascade to megavid -> hianime if megaplay missing
       if (!result) result = await fetchMegavidSmart(targetId, targetAlId, ep, audioType, subserver);
+      if (!result) result = await fetchHiAnimeSource(targetId, ep, audioType);
+    } else if (selectedServer === 'hianime') {
+      result = await fetchHiAnimeSource(targetId, ep, audioType);
+      // Fallback to megavid -> megaplay if hianime missing
+      if (!result) result = await fetchMegavidSmart(targetId, targetAlId, ep, audioType, subserver);
+      if (!result) result = await fetchMegaPlaySource(targetId, ep, audioType);
     } else {
       result = await fetchMegavidSmart(targetId, targetAlId, ep, audioType, subserver);
-      // Fallback to hianime if megavid missing
+      // Fallback to hianime -> megaplay if megavid missing
       if (!result) result = await fetchHiAnimeSource(targetId, ep, audioType);
+      if (!result) result = await fetchMegaPlaySource(targetId, ep, audioType);
     }
 
     if (result) {
