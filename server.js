@@ -41,6 +41,33 @@ function attachMegaPlayCdnToken(url) {
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
+const VIDNEST_ALPHABET = "RB0fpH8ZEyVLkv7c2i6MAJ5u3IKFDxlS1NTsnGaqmXYdUrtzjwObCgQP94hoeW+/=";
+const VIDNEST_MAP = {};
+for (let i = 0; i < VIDNEST_ALPHABET.length; i++) VIDNEST_MAP[VIDNEST_ALPHABET[i]] = i;
+
+function decryptVidnest(cipherText) {
+  if (!cipherText || typeof cipherText !== 'string') return null;
+  try {
+    const i = [];
+    for (let t = 0; t < cipherText.length; t += 4) {
+      let o = cipherText.slice(t, t + 4);
+      while (o.length < 4) o += "=";
+      const d = [];
+      for (let e = 0; e < 4; e++) {
+        const val = VIDNEST_MAP[o[e]];
+        d.push(val !== undefined ? val : 64);
+      }
+      i.push((d[0] << 2) | (d[1] >> 4));
+      if (d[2] !== 64) i.push(((d[1] & 15) << 4) | (d[2] >> 2));
+      if (d[3] !== 64) i.push(((d[2] & 3) << 6) | d[3]);
+    }
+    const decoded = Buffer.from(i).toString('utf8');
+    return JSON.parse(decoded);
+  } catch (e) {
+    return null;
+  }
+}
+
 function isMegaPlayUrl(url) {
   if (!url || typeof url !== 'string') return false;
   return /\/[a-f0-9]{32}\/[a-f0-9]{32}\//i.test(url) ||
@@ -577,27 +604,70 @@ const server = http.createServer(async (req, res) => {
         return null;
       }
 
+      async function tryVidnest(route, targetAl, epNum, aType) {
+        if (!targetAl) return null;
+        try {
+          const vUrl = route === 'hianime'
+            ? `https://new.vidnest.fun/hianime/anime/${targetAl}/${epNum}/${aType}/hd-2`
+            : `https://new.vidnest.fun/${route}/${targetAl}/${epNum}/${aType}`;
+          const res = await fetchUrl(vUrl, {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://vidnest.fun/',
+            'Accept': 'application/json, text/plain, */*'
+          });
+          if (res.status !== 200) return null;
+          const bodyStr = Buffer.isBuffer(res.body) ? res.body.toString('utf-8') : res.body;
+          const json = JSON.parse(bodyStr);
+          const data = json.encrypted ? decryptVidnest(json.data) : json;
+          const streamUrl = data?.sources?.[0]?.file || data?.sources?.[0]?.url;
+
+          if (streamUrl) {
+            return {
+              status: 'ok',
+              server: 'megavid',
+              subserver: route === 'aniwave_hls' ? 'aniwave' : (route === 'animehub' ? 'ani' : 'vidnest'),
+              alId: targetAl,
+              episode: epNum,
+              type: aType,
+              streamUrl: streamUrl,
+              rawSource: streamUrl,
+              tracks: data.tracks || [],
+              intro: data.intro || null,
+              outro: data.outro || null
+            };
+          }
+        } catch (e) {}
+        return null;
+      }
+
       async function tryMegavidSmart(id, al, epNum, aType, sub) {
         if (sub === 'aniwave') {
           let res = await tryAniWave(al || id, epNum, aType);
+          if (!res) res = await tryVidnest('aniwave_hls', al || id, epNum, aType);
+          if (!res) res = await tryVidnest('hianime', al || id, epNum, aType);
           if (!res) res = await tryAni(al || id, epNum, aType);
           if (!res) res = await tryMegavidMal(id, epNum, aType);
           return res;
         }
         if (sub === 'ani') {
           let res = await tryAni(al || id, epNum, aType);
+          if (!res) res = await tryVidnest('animehub', al || id, epNum, aType);
+          if (!res) res = await tryVidnest('hianime', al || id, epNum, aType);
           if (!res) res = await tryAniWave(al || id, epNum, aType);
           if (!res) res = await tryMegavidMal(id, epNum, aType);
           return res;
         }
         if (sub === 'megavid' || sub === 'mal') {
           let res = await tryMegavidMal(id, epNum, aType);
+          if (!res) res = await tryVidnest('hianime', al || id, epNum, aType);
           if (!res) res = await tryAniWave(al || id, epNum, aType);
           if (!res) res = await tryAni(al || id, epNum, aType);
           return res;
         }
-        // Auto: MAL -> AniWave -> Ani
-        let res = await tryMegavidMal(id, epNum, aType);
+        // Auto (Default): Try VidNest (HiAnime/Aniwave) -> MAL -> AniWave -> Ani
+        let res = await tryVidnest('hianime', al || id, epNum, aType);
+        if (!res) res = await tryVidnest('aniwave_hls', al || id, epNum, aType);
+        if (!res) res = await tryMegavidMal(id, epNum, aType);
         if (!res) res = await tryAniWave(al || id, epNum, aType);
         if (!res) res = await tryAni(al || id, epNum, aType);
         return res;

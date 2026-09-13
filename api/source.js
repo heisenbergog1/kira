@@ -36,6 +36,33 @@ function attachMegaPlayCdnToken(url) {
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
+const VIDNEST_ALPHABET = "RB0fpH8ZEyVLkv7c2i6MAJ5u3IKFDxlS1NTsnGaqmXYdUrtzjwObCgQP94hoeW+/=";
+const VIDNEST_MAP = {};
+for (let i = 0; i < VIDNEST_ALPHABET.length; i++) VIDNEST_MAP[VIDNEST_ALPHABET[i]] = i;
+
+function decryptVidnest(cipherText) {
+  if (!cipherText || typeof cipherText !== 'string') return null;
+  try {
+    const i = [];
+    for (let t = 0; t < cipherText.length; t += 4) {
+      let o = cipherText.slice(t, t + 4);
+      while (o.length < 4) o += "=";
+      const d = [];
+      for (let e = 0; e < 4; e++) {
+        const val = VIDNEST_MAP[o[e]];
+        d.push(val !== undefined ? val : 64);
+      }
+      i.push((d[0] << 2) | (d[1] >> 4));
+      if (d[2] !== 64) i.push(((d[1] & 15) << 4) | (d[2] >> 2));
+      if (d[3] !== 64) i.push(((d[2] & 3) << 6) | d[3]);
+    }
+    const decoded = Buffer.from(i).toString('utf8');
+    return JSON.parse(decoded);
+  } catch (e) {
+    return null;
+  }
+}
+
 const OBF_KEY = 'otaku-embed-v1';
 
 function deobfuscateZoko(blob) {
@@ -167,11 +194,53 @@ async function fetchAniSource(alId, ep, audioType) {
   return null;
 }
 
+async function fetchVidnestSource(route, alId, ep, audioType) {
+  if (!alId) return null;
+  try {
+    const url = route === 'hianime'
+      ? `https://new.vidnest.fun/hianime/anime/${alId}/${ep}/${audioType}/hd-2`
+      : `https://new.vidnest.fun/${route}/${alId}/${ep}/${audioType}`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://vidnest.fun/',
+        'Accept': 'application/json, text/plain, */*'
+      }
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const data = json.encrypted ? decryptVidnest(json.data) : json;
+    const streamUrl = data?.sources?.[0]?.file || data?.sources?.[0]?.url;
+
+    if (streamUrl) {
+      return {
+        status: 'ok',
+        server: 'megavid',
+        subserver: route === 'aniwave_hls' ? 'aniwave' : (route === 'animehub' ? 'ani' : 'vidnest'),
+        alId: alId,
+        episode: ep,
+        type: audioType,
+        streamUrl: streamUrl,
+        rawSource: streamUrl,
+        tracks: data.tracks || [],
+        intro: data.intro || null,
+        outro: data.outro || null
+      };
+    }
+  } catch (e) {
+    return null;
+  }
+  return null;
+}
+
 async function fetchMegavidSmart(id, alId, ep, audioType, subserver = 'auto') {
   const chosen = (subserver || 'auto').toLowerCase();
   
   if (chosen === 'aniwave') {
     let res = await fetchAniWaveSource(alId || id, ep, audioType);
+    if (!res) res = await fetchVidnestSource('aniwave_hls', alId || id, ep, audioType);
+    if (!res) res = await fetchVidnestSource('hianime', alId || id, ep, audioType);
     if (!res) res = await fetchAniSource(alId || id, ep, audioType);
     if (!res) res = await fetchMegavidMalSource(id, ep, audioType);
     return res;
@@ -179,6 +248,8 @@ async function fetchMegavidSmart(id, alId, ep, audioType, subserver = 'auto') {
   
   if (chosen === 'ani') {
     let res = await fetchAniSource(alId || id, ep, audioType);
+    if (!res) res = await fetchVidnestSource('animehub', alId || id, ep, audioType);
+    if (!res) res = await fetchVidnestSource('hianime', alId || id, ep, audioType);
     if (!res) res = await fetchAniWaveSource(alId || id, ep, audioType);
     if (!res) res = await fetchMegavidMalSource(id, ep, audioType);
     return res;
@@ -186,13 +257,16 @@ async function fetchMegavidSmart(id, alId, ep, audioType, subserver = 'auto') {
   
   if (chosen === 'megavid' || chosen === 'mal') {
     let res = await fetchMegavidMalSource(id, ep, audioType);
+    if (!res) res = await fetchVidnestSource('hianime', alId || id, ep, audioType);
     if (!res) res = await fetchAniWaveSource(alId || id, ep, audioType);
     if (!res) res = await fetchAniSource(alId || id, ep, audioType);
     return res;
   }
 
-  // Auto (Default): Try MAL -> AniWave -> Ani
-  let res = await fetchMegavidMalSource(id, ep, audioType);
+  // Auto (Default): Try VidNest (HiAnime/Aniwave) -> MAL -> AniWave -> Ani
+  let res = await fetchVidnestSource('hianime', alId || id, ep, audioType);
+  if (!res) res = await fetchVidnestSource('aniwave_hls', alId || id, ep, audioType);
+  if (!res) res = await fetchMegavidMalSource(id, ep, audioType);
   if (!res) res = await fetchAniWaveSource(alId || id, ep, audioType);
   if (!res) res = await fetchAniSource(alId || id, ep, audioType);
   return res;
