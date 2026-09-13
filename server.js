@@ -1,9 +1,45 @@
 import http from 'http';
 import https from 'https';
+import crypto from 'crypto';
 import url from 'url';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+const MEGAPLAY_KEY = Buffer.alloc(32);
+MEGAPLAY_KEY.set(Buffer.from("i?LMTAx0Q6,:}50U", 'utf8').subarray(0, 32));
+const MEGAPLAY_IV = Buffer.from("W0;27ToaUpl_P%'c", 'utf8');
+const MEGAPLAY_CDN_KEY = Buffer.from("MpCdnT0k3n!9f2K#xQ7vL5mR8wN1pY4s", 'utf8');
+
+function decryptMegaPlay(encString) {
+  try {
+    let b64 = encString.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4 !== 0) b64 += '=';
+    const cipherBuffer = Buffer.from(b64, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', MEGAPLAY_KEY, MEGAPLAY_IV);
+    let decrypted = decipher.update(cipherBuffer);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+function attachMegaPlayCdnToken(url) {
+  if (!url || typeof url !== 'string' || url.includes('token=')) return url;
+  const match = url.match(/\/([a-f0-9]{32})\/([a-f0-9]{32})\//i);
+  if (!match) return url;
+  const pathPair = `${match[1].toLowerCase()}/${match[2].toLowerCase()}`;
+  const expiry = Math.floor(Date.now() / 1000) + 86400;
+  const message = `${expiry}|${pathPair}`;
+  const hmac = crypto.createHmac('sha256', MEGAPLAY_CDN_KEY);
+  hmac.update(Buffer.from(message, 'utf8'));
+  const b64Msg = Buffer.from(message, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const b64Sig = hmac.digest().toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const token = `${b64Msg}.${b64Sig}`;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -247,15 +283,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
+      let actualUrl = targetStreamUrl;
       let pRef = 'https://megavid.buzz/';
       let pOrig = 'https://megavid.buzz';
-      if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
+      if (actualUrl.includes('aniwatchtv.uk') || actualUrl.includes('zokoanime.video')) {
         pRef = 'https://zokoanime.video/';
         pOrig = 'https://zokoanime.video';
-      } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top')) {
+      } else if (actualUrl.includes('megaplay.buzz') || actualUrl.includes('.top') || actualUrl.includes('akirax.buzz')) {
         pRef = 'https://megaplay.buzz/';
         pOrig = 'https://megaplay.buzz';
-      } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {
+        actualUrl = attachMegaPlayCdnToken(actualUrl);
+      } else if (actualUrl.includes('megavid.buzz') || actualUrl.includes('api-webs.com')) {
         pRef = 'https://megavid.buzz/';
         pOrig = 'https://megavid.buzz';
       }
@@ -264,11 +302,12 @@ const server = http.createServer(async (req, res) => {
         'Referer': pRef,
         'Origin': pOrig
       };
-      const response = await fetchUrl(targetStreamUrl, pHeaders, null, false, req.headers.range);
+      const isM3u8Req = actualUrl.includes('.m3u8');
+      const response = await fetchUrl(actualUrl, pHeaders, null, !isM3u8Req, req.headers.range);
       
       const upstreamHeaders = response.headers;
       const upstreamContentType = (upstreamHeaders['content-type'] || '').toLowerCase();
-      const isM3u8 = targetStreamUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegurl');
+      const isM3u8 = actualUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegurl');
       const resHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Range, Content-Type',
@@ -281,8 +320,8 @@ const server = http.createServer(async (req, res) => {
 
       if (isM3u8) {
         resHeaders['Content-Type'] = 'application/vnd.apple.mpegurl';
-        let playlistContent = response.body;
-        const baseUrl = targetStreamUrl.substring(0, targetStreamUrl.lastIndexOf('/') + 1);
+        let playlistContent = Buffer.isBuffer(response.body) ? response.body.toString('utf-8') : response.body;
+        const baseUrl = actualUrl.substring(0, actualUrl.lastIndexOf('/') + 1);
         const hostHeader = req.headers.host || `localhost:${PORT}`;
         const prefix = `http://${hostHeader}`;
 
@@ -303,6 +342,9 @@ const server = http.createServer(async (req, res) => {
               let absoluteSegmentUrl = line;
               if (!line.startsWith('http://') && !line.startsWith('https://')) {
                 absoluteSegmentUrl = baseUrl + line;
+              }
+              if (absoluteSegmentUrl.includes('.top') || absoluteSegmentUrl.includes('megaplay.buzz')) {
+                absoluteSegmentUrl = attachMegaPlayCdnToken(absoluteSegmentUrl);
               }
               const bwMatch = currentInf.match(/BANDWIDTH=(\d+)/);
               const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
@@ -343,6 +385,9 @@ const server = http.createServer(async (req, res) => {
                   if (!u.startsWith('http://') && !u.startsWith('https://')) {
                     abs = baseUrl + u;
                   }
+                  if (abs.includes('.top') || abs.includes('megaplay.buzz')) {
+                    abs = attachMegaPlayCdnToken(abs);
+                  }
                   return `URI="${prefix}/api/stream?url=${encodeURIComponent(abs)}"`;
                 });
               }
@@ -351,6 +396,9 @@ const server = http.createServer(async (req, res) => {
             let absoluteSegmentUrl = line;
             if (!line.startsWith('http://') && !line.startsWith('https://')) {
               absoluteSegmentUrl = baseUrl + line;
+            }
+            if (absoluteSegmentUrl.includes('.top') || absoluteSegmentUrl.includes('megaplay.buzz')) {
+              absoluteSegmentUrl = attachMegaPlayCdnToken(absoluteSegmentUrl);
             }
             return `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
           });
@@ -555,8 +603,49 @@ const server = http.createServer(async (req, res) => {
         return null;
       }
 
+      async function tryMegaPlay(id, epNum, aType) {
+        try {
+          const embedUrl = `https://megaplay.buzz/stream/mal/${id}/${epNum}/${aType}?autostart=false`;
+          const embedRes = await fetchUrl(embedUrl, { 'Referer': 'https://anikoto.cz/' });
+          const html = typeof embedRes.body === 'string' ? embedRes.body : embedRes.body.toString('utf-8');
+          const fileId = html.match(/File\s+(\d+)/i)?.[1] || html.match(/data-(?:realid|id|ep-id)=["'](\d+)["']/i)?.[1];
+          if (!fileId) return null;
+
+          const sourcesRes = await fetchUrl(`https://megaplay.buzz/stream/getSources?id=${fileId}&id=${fileId}`, {
+            'Referer': embedUrl,
+            'X-Requested-With': 'XMLHttpRequest'
+          });
+          const sourcesData = JSON.parse(sourcesRes.body);
+          let streamUrl = null;
+          if (sourcesData.enc) {
+            const dec = decryptMegaPlay(sourcesData.enc);
+            if (dec) streamUrl = dec.file || dec.url;
+          } else {
+            streamUrl = sourcesData.file || sourcesData.source;
+          }
+
+          if (streamUrl) {
+            return {
+              status: 'ok',
+              server: 'megaplay',
+              malId: id,
+              episode: epNum,
+              type: aType,
+              streamUrl: attachMegaPlayCdnToken(streamUrl),
+              tracks: sourcesData.tracks || [],
+              subtitles: (sourcesData.tracks || []).filter(t => t.kind === 'captions' || t.kind === 'subtitles')
+            };
+          }
+        } catch (e) {}
+        return null;
+      }
+
       let result = null;
-      if (serverParam === 'hianime') {
+      if (serverParam === 'megaplay') {
+        result = await tryMegaPlay(targetId, ep, type);
+        if (!result) result = await tryMegavidSmart(targetId, targetAlId, ep, type, subserverParam);
+        if (!result) result = await tryHiAnime(targetId, ep, type);
+      } else if (serverParam === 'hianime') {
         result = await tryHiAnime(targetId, ep, type);
         if (!result) result = await tryMegavidSmart(targetId, targetAlId, ep, type, subserverParam);
       } else {

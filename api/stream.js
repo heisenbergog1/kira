@@ -1,3 +1,23 @@
+import crypto from 'crypto';
+
+const MEGAPLAY_CDN_KEY = Buffer.from("MpCdnT0k3n!9f2K#xQ7vL5mR8wN1pY4s", 'utf8');
+
+function attachMegaPlayCdnToken(url) {
+  if (!url || typeof url !== 'string' || url.includes('token=')) return url;
+  const match = url.match(/\/([a-f0-9]{32})\/([a-f0-9]{32})\//i);
+  if (!match) return url;
+  const pathPair = `${match[1].toLowerCase()}/${match[2].toLowerCase()}`;
+  const expiry = Math.floor(Date.now() / 1000) + 86400;
+  const message = `${expiry}|${pathPair}`;
+  const hmac = crypto.createHmac('sha256', MEGAPLAY_CDN_KEY);
+  hmac.update(Buffer.from(message, 'utf8'));
+  const b64Msg = Buffer.from(message, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const b64Sig = hmac.digest().toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  const token = `${b64Msg}.${b64Sig}`;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -14,16 +34,18 @@ export default async function handler(req, res) {
 
   try {
     // Dynamic referrer injection based on host domain
+    let actualUrl = targetStreamUrl;
     let referer = 'https://megavid.buzz/';
     let origin = 'https://megavid.buzz';
 
-    if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
+    if (actualUrl.includes('aniwatchtv.uk') || actualUrl.includes('zokoanime.video')) {
       referer = 'https://zokoanime.video/';
       origin = 'https://zokoanime.video';
-    } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top')) {
+    } else if (actualUrl.includes('megaplay.buzz') || actualUrl.includes('.top') || actualUrl.includes('akirax.buzz')) {
       referer = 'https://megaplay.buzz/';
       origin = 'https://megaplay.buzz';
-    } else if (targetStreamUrl.includes('megavid.buzz') || targetStreamUrl.includes('api-webs.com')) {
+      actualUrl = attachMegaPlayCdnToken(actualUrl);
+    } else if (actualUrl.includes('megavid.buzz') || actualUrl.includes('api-webs.com')) {
       referer = 'https://megavid.buzz/';
       origin = 'https://megavid.buzz';
     }
@@ -39,13 +61,13 @@ export default async function handler(req, res) {
       headers['Range'] = req.headers.range;
     }
 
-    const upstreamRes = await fetch(targetStreamUrl, { headers });
+    const upstreamRes = await fetch(actualUrl, { headers });
     const upstreamContentType = (upstreamRes.headers.get('content-type') || '').toLowerCase();
-    const isM3u8 = targetStreamUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegurl');
+    const isM3u8 = actualUrl.includes('.m3u8') || upstreamContentType.includes('mpegurl') || upstreamContentType.includes('application/x-mpegurl');
 
     if (isM3u8) {
       const playlistContent = await upstreamRes.text();
-      const baseUrl = targetStreamUrl.substring(0, targetStreamUrl.lastIndexOf('/') + 1);
+      const baseUrl = actualUrl.substring(0, actualUrl.lastIndexOf('/') + 1);
       
       // Determine host for absolute URL rewriting so iOS Safari AVPlayer in new tabs resolves every segment correctly
       const proto = req.headers['x-forwarded-proto'] || 'https';
@@ -69,6 +91,9 @@ export default async function handler(req, res) {
             let absoluteSegmentUrl = line;
             if (!line.startsWith('http://') && !line.startsWith('https://')) {
               absoluteSegmentUrl = baseUrl + line;
+            }
+            if (absoluteSegmentUrl.includes('.top') || absoluteSegmentUrl.includes('megaplay.buzz')) {
+              absoluteSegmentUrl = attachMegaPlayCdnToken(absoluteSegmentUrl);
             }
             const bwMatch = currentInf.match(/BANDWIDTH=(\d+)/);
             const bw = bwMatch ? parseInt(bwMatch[1], 10) : 0;
@@ -109,6 +134,9 @@ export default async function handler(req, res) {
                 if (!u.startsWith('http://') && !u.startsWith('https://')) {
                   abs = baseUrl + u;
                 }
+                if (abs.includes('.top') || abs.includes('megaplay.buzz')) {
+                  abs = attachMegaPlayCdnToken(abs);
+                }
                 return `URI="${prefix}/api/stream?url=${encodeURIComponent(abs)}"`;
               });
             }
@@ -117,6 +145,9 @@ export default async function handler(req, res) {
           let absoluteSegmentUrl = line;
           if (!line.startsWith('http://') && !line.startsWith('https://')) {
             absoluteSegmentUrl = baseUrl + line;
+          }
+          if (absoluteSegmentUrl.includes('.top') || absoluteSegmentUrl.includes('megaplay.buzz')) {
+            absoluteSegmentUrl = attachMegaPlayCdnToken(absoluteSegmentUrl);
           }
           return `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
         });
