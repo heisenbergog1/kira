@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
       referer = 'https://zokoanime.video/';
       origin = 'https://zokoanime.video';
-    } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('quavex.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top') || targetStreamUrl.includes('akirax.buzz')) {
+    } else if (targetStreamUrl.includes('.top') || targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom') || targetStreamUrl.includes('quavex') || targetStreamUrl.includes('tyrionx') || targetStreamUrl.includes('snapcdn') || targetStreamUrl.includes('zhaevor') || targetStreamUrl.includes('akirax.buzz')) {
       referer = 'https://megaplay.buzz/';
       origin = 'https://megaplay.buzz';
       targetStreamUrl = attachMegaPlayCdnToken(targetStreamUrl);

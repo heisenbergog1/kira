@@ -272,7 +272,7 @@ const server = http.createServer(async (req, res) => {
       if (targetStreamUrl.includes('aniwatchtv.uk') || targetStreamUrl.includes('zokoanime.video')) {
         pRef = 'https://zokoanime.video/';
         pOrig = 'https://zokoanime.video';
-      } else if (targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom.top') || targetStreamUrl.includes('quavex.top') || targetStreamUrl.includes('tyrionx.top') || targetStreamUrl.includes('snapcdn.top') || targetStreamUrl.includes('zhaevor.top') || targetStreamUrl.includes('akirax.buzz')) {
+      } else if (targetStreamUrl.includes('.top') || targetStreamUrl.includes('megaplay.buzz') || targetStreamUrl.includes('imgnex.top') || targetStreamUrl.includes('nexabloom') || targetStreamUrl.includes('quavex') || targetStreamUrl.includes('tyrionx') || targetStreamUrl.includes('snapcdn') || targetStreamUrl.includes('zhaevor') || targetStreamUrl.includes('akirax.buzz')) {
         pRef = 'https://megaplay.buzz/';
         pOrig = 'https://megaplay.buzz';
         actualStreamUrl = attachMegaPlayCdnToken(targetStreamUrl);
@@ -285,7 +285,8 @@ const server = http.createServer(async (req, res) => {
         'Referer': pRef,
         'Origin': pOrig
       };
-      const response = await fetchUrl(actualStreamUrl, pHeaders, null, false, req.headers.range);
+      const isM3u8Req = targetStreamUrl.includes('.m3u8');
+      const response = await fetchUrl(actualStreamUrl, pHeaders, null, !isM3u8Req, req.headers.range);
       
       const upstreamHeaders = response.headers;
       const upstreamContentType = (upstreamHeaders['content-type'] || '').toLowerCase();
@@ -302,7 +303,7 @@ const server = http.createServer(async (req, res) => {
 
       if (isM3u8) {
         resHeaders['Content-Type'] = 'application/vnd.apple.mpegurl';
-        let playlistContent = response.body;
+        let playlistContent = Buffer.isBuffer(response.body) ? response.body.toString('utf-8') : response.body;
         const baseUrl = targetStreamUrl.substring(0, targetStreamUrl.lastIndexOf('/') + 1);
         const hostHeader = req.headers.host || `localhost:${PORT}`;
         const prefix = `http://${hostHeader}`;
@@ -390,7 +391,7 @@ const server = http.createServer(async (req, res) => {
           contentType = 'application/octet-stream';
         }
         resHeaders['Content-Type'] = contentType;
-        
+        resHeaders['Content-Length'] = Buffer.isBuffer(response.body) ? response.body.length : Buffer.byteLength(response.body);
         res.writeHead(response.status, resHeaders);
         res.end(response.body);
       }
