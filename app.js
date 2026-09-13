@@ -1042,7 +1042,7 @@ function setupEvents() {
             subPill.className = 'sub-server-pill hidden';
           }
         }
-        var serverName = state.currentServer === 'hianime' ? 'HiAnime' : (state.currentServer === 'megaplay' ? 'MegaPlay' : 'Megavid');
+        var serverName = state.currentServer === 'hianime' ? 'HiAnime' : 'Megavid';
         showToast('Server: ' + serverName);
         if (state.selectedAnime && state.currentEpisode) {
           var malId = state.selectedAnime.idMal || state.selectedAnime.id;
