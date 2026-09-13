@@ -41,6 +41,16 @@ function attachMegaPlayCdnToken(url) {
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
+function isMegaPlayUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  return /\/[a-f0-9]{32}\/[a-f0-9]{32}\//i.test(url) ||
+         url.includes('.top') ||
+         url.includes('.site') ||
+         url.includes('megaplay.buzz') ||
+         url.includes('akirax.buzz') ||
+         url.includes('streamzone');
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 3000;
@@ -289,7 +299,7 @@ const server = http.createServer(async (req, res) => {
       if (actualUrl.includes('aniwatchtv.uk') || actualUrl.includes('zokoanime.video')) {
         pRef = 'https://zokoanime.video/';
         pOrig = 'https://zokoanime.video';
-      } else if (actualUrl.includes('megaplay.buzz') || actualUrl.includes('.top') || actualUrl.includes('akirax.buzz')) {
+      } else if (isMegaPlayUrl(actualUrl)) {
         pRef = 'https://megaplay.buzz/';
         pOrig = 'https://megaplay.buzz';
         actualUrl = attachMegaPlayCdnToken(actualUrl);
@@ -343,7 +353,7 @@ const server = http.createServer(async (req, res) => {
               if (!line.startsWith('http://') && !line.startsWith('https://')) {
                 absoluteSegmentUrl = baseUrl + line;
               }
-              if (absoluteSegmentUrl.includes('.top') || absoluteSegmentUrl.includes('megaplay.buzz')) {
+              if (isMegaPlayUrl(absoluteSegmentUrl)) {
                 absoluteSegmentUrl = attachMegaPlayCdnToken(absoluteSegmentUrl);
               }
               const bwMatch = currentInf.match(/BANDWIDTH=(\d+)/);
@@ -361,7 +371,7 @@ const server = http.createServer(async (req, res) => {
                   if (!u.startsWith('http://') && !u.startsWith('https://')) {
                     abs = baseUrl + u;
                   }
-                  if (abs.includes('.top') || abs.includes('megaplay.buzz')) {
+                  if (isMegaPlayUrl(abs)) {
                     abs = attachMegaPlayCdnToken(abs);
                   }
                   return `URI="${prefix}/api/stream?url=${encodeURIComponent(abs)}"`;
@@ -399,7 +409,7 @@ const server = http.createServer(async (req, res) => {
                   if (!u.startsWith('http://') && !u.startsWith('https://')) {
                     abs = baseUrl + u;
                   }
-                  if (abs.includes('.top') || abs.includes('megaplay.buzz')) {
+                  if (isMegaPlayUrl(abs)) {
                     abs = attachMegaPlayCdnToken(abs);
                   }
                   return `URI="${prefix}/api/stream?url=${encodeURIComponent(abs)}"`;
@@ -411,7 +421,7 @@ const server = http.createServer(async (req, res) => {
             if (!line.startsWith('http://') && !line.startsWith('https://')) {
               absoluteSegmentUrl = baseUrl + line;
             }
-            if (absoluteSegmentUrl.includes('.top') || absoluteSegmentUrl.includes('megaplay.buzz')) {
+            if (isMegaPlayUrl(absoluteSegmentUrl)) {
               absoluteSegmentUrl = attachMegaPlayCdnToken(absoluteSegmentUrl);
             }
             return `${prefix}/api/stream?url=${encodeURIComponent(absoluteSegmentUrl)}`;
