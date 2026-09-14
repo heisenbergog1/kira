@@ -1,0 +1,87 @@
+name: Build iOS 9 ARMv7 IPA for iPad Mini 1
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential git curl wget zip unzip tar xz-utils \
+            clang llvm lld file libtinfo5 libncurses5 libssl-dev
+
+      - name: Setup Theos
+        run: |
+          git clone --recursive https://github.com/theos/theos.git ~/theos
+          mkdir -p ~/theos/sdks ~/theos/toolchain/linux/iphone ~/theos/bin
+
+      - name: Download iOS 9.3 SDK & Toolchain
+        run: |
+          # 1. Genuine iOS 9.3 SDK
+          curl -L "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS9.3.sdk.tar.xz" -o /tmp/sdk.tar.xz
+          tar -xf /tmp/sdk.tar.xz -C ~/theos/sdks/
+          
+          # 2. Linux iOS Cross-Compiler Toolchain
+          curl -L "https://github.com/sbingner/llvm-project/releases/download/v10.0.0-1/linux-ios-arm64e-clang-toolchain.tar.lzma" -o /tmp/toolchain.tar.lzma
+          tar --lzma -xf /tmp/toolchain.tar.lzma -C ~/theos/toolchain/linux/iphone/
+          
+          # Fix nested directory if extracted as subfolder
+          if [ -d ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain ]; then
+            mv ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain/* ~/theos/toolchain/linux/iphone/
+            rm -rf ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain
+          fi
+          
+          # 3. Setup ldid
+          curl -L "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -o ~/theos/bin/ldid
+          chmod +x ~/theos/bin/ldid
+          sudo cp ~/theos/bin/ldid /usr/local/bin/ldid
+
+      - name: Copy Web Assets to App Bundle
+        run: |
+          mkdir -p ios-app/Resources/www
+          cp index.html styles.css app.js ios-app/Resources/www/ 2>/dev/null || true
+
+      - name: Compile and Package CineStream IPA
+        run: |
+          export THEOS=$HOME/theos
+          export SDKVERSION=9.3
+          export TARGET=iphone:clang:latest:9.0
+          export ARCHS=armv7
+          export PATH=$THEOS/bin:$THEOS/toolchain/linux/iphone/bin:$PATH
+          
+          cd ios-app
+          
+          mkdir -p Payload/CineStream.app/www
+          cp -r Resources/www/* Payload/CineStream.app/www/ 2>/dev/null || true
+          cp Info.plist Payload/CineStream.app/Info.plist
+          
+          $THEOS/toolchain/linux/iphone/bin/clang \
+            -target armv7-apple-ios9.0 \
+            -isysroot $THEOS/sdks/iPhoneOS9.3.sdk \
+            -fobjc-arc \
+            -framework UIKit \
+            -framework WebKit \
+            -framework CoreGraphics \
+            -framework Foundation \
+            main.m \
+            -o Payload/CineStream.app/CineStream
+            
+          $THEOS/bin/ldid -Sentitlements.plist Payload/CineStream.app/CineStream
+          file Payload/CineStream.app/CineStream
+          zip -r CineStream-iOS9-iPadMini1.ipa Payload
+
+      - name: Upload CineStream IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CineStream-iOS9-iPadMini1
+          path: ios-app/CineStream-iOS9-iPadMini1.ipa
