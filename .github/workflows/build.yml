@@ -7,50 +7,72 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Theos & iOS 9.3 SDK
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential git curl wget zip unzip tar xz-utils \
+            clang llvm lld file libtinfo5 libncurses5 libssl-dev
+
+      - name: Setup Theos & iOS Toolchain
         run: |
           git clone --recursive https://github.com/theos/theos.git ~/theos
-          mkdir -p ~/theos/sdks
+          mkdir -p ~/theos/sdks ~/theos/toolchain/linux/iphone ~/theos/bin
+          
+          # 1. Download iOS 9.3 SDK
           curl -L "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS9.3.sdk.tar.xz" -o /tmp/sdk.tar.xz
           tar -xf /tmp/sdk.tar.xz -C ~/theos/sdks/
+          
+          # 2. Download Linux iOS LLVM cross compiler
+          curl -L "https://github.com/sbingner/llvm-project/releases/download/v10.0.0-1/linux-ios-arm64e-clang-toolchain.tar.lzma" -o /tmp/toolchain.tar.lzma
+          tar --lzma -xf /tmp/toolchain.tar.lzma -C ~/theos/toolchain/linux/iphone/
+          
+          if [ -d ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain ]; then
+            mv ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain/* ~/theos/toolchain/linux/iphone/
+            rm -rf ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain
+          fi
+          
+          ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang
+          ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang++
+          chmod -R +x ~/theos/toolchain/linux/iphone/bin/
+          
+          # 3. Setup ldid
+          curl -L "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -o ~/theos/bin/ldid
+          chmod +x ~/theos/bin/ldid
+          sudo cp ~/theos/bin/ldid /usr/local/bin/ldid
 
-      - name: Compile and Package CineStream IPA
+      - name: Build CineStream App with Theos
         run: |
           export THEOS=$HOME/theos
           export SDKVERSION=9.3
           export TARGET=iphone:clang:9.3:9.0
           export ARCHS=armv7
+          export PATH=$THEOS/bin:$THEOS/toolchain/linux/iphone/bin:$PATH
           
           cd ios-app
           
+          # Execute Theos Makefile
+          make clean || true
+          make -j$(nproc) package FINALPACKAGE=1
+          
+          # Create Payload directory for IPA
+          mkdir -p Payload
+          cp -r .theos/obj/debug/CineStream.app Payload/ 2>/dev/null || cp -r .theos/obj/CineStream.app Payload/
+          
+          # Embed CineStream web bundle
           mkdir -p Payload/CineStream.app/www
           cp ../index.html ../styles.css ../app.js Payload/CineStream.app/www/ 2>/dev/null || true
-          cp Info.plist Payload/CineStream.app/Info.plist
           
-          # Native Apple Clang targeting ARMv7 iOS 9.0
-          xcrun -sdk "$THEOS/sdks/iPhoneOS9.3.sdk" clang \
-            -arch armv7 \
-            -miphoneos-version-min=9.0 \
-            -isysroot "$THEOS/sdks/iPhoneOS9.3.sdk" \
-            -fobjc-arc \
-            -framework UIKit \
-            -framework WebKit \
-            -framework AVFoundation \
-            -framework CoreGraphics \
-            -framework Foundation \
-            main.m \
-            -o Payload/CineStream.app/CineStream
-            
           # Sign binary with ldid
-          ~/theos/bin/ldid -Sentitlements.plist Payload/CineStream.app/CineStream || ldid -Sentitlements.plist Payload/CineStream.app/CineStream || true
+          $THEOS/bin/ldid -Sentitlements.plist Payload/CineStream.app/CineStream
           
-          # Print architecture info
+          # Verify binary
           file Payload/CineStream.app/CineStream
           
           # Create IPA
