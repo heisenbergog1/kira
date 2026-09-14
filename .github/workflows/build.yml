@@ -35,21 +35,20 @@ jobs:
           curl -L "https://github.com/sbingner/llvm-project/releases/download/v10.0.0-1/linux-ios-arm64e-clang-toolchain.tar.lzma" -o /tmp/toolchain.tar.lzma
           tar --lzma -xf /tmp/toolchain.tar.lzma -C ~/theos/toolchain/linux/iphone/
           
-          # Fix nested directory if extracted as subfolder
           if [ -d ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain ]; then
             mv ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain/* ~/theos/toolchain/linux/iphone/
             rm -rf ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain
           fi
           
+          # Ensure clang alias and executable permissions
+          ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang
+          ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang++
+          chmod -R +x ~/theos/toolchain/linux/iphone/bin/
+          
           # 3. Setup ldid
           curl -L "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -o ~/theos/bin/ldid
           chmod +x ~/theos/bin/ldid
           sudo cp ~/theos/bin/ldid /usr/local/bin/ldid
-
-      - name: Copy Web Assets to App Bundle
-        run: |
-          mkdir -p ios-app/Resources/www
-          cp index.html styles.css app.js ios-app/Resources/www/ 2>/dev/null || true
 
       - name: Compile and Package CineStream IPA
         run: |
@@ -61,23 +60,25 @@ jobs:
           
           cd ios-app
           
-          mkdir -p Payload/CineStream.app/www
-          cp -r Resources/www/* Payload/CineStream.app/www/ 2>/dev/null || true
-          cp Info.plist Payload/CineStream.app/Info.plist
+          # Build via Theos standard Makefile (handles SDK paths and flags automatically)
+          make clean || true
+          make package FINALPACKAGE=1
           
-          $THEOS/toolchain/linux/iphone/bin/clang \
-            -target armv7-apple-ios9.0 \
-            -isysroot $THEOS/sdks/iPhoneOS9.3.sdk \
-            -fobjc-arc \
-            -framework UIKit \
-            -framework WebKit \
-            -framework CoreGraphics \
-            -framework Foundation \
-            main.m \
-            -o Payload/CineStream.app/CineStream
-            
+          # Package into IPA
+          mkdir -p Payload
+          cp -r .theos/obj/debug/CineStream.app Payload/ 2>/dev/null || cp -r .theos/obj/CineStream.app Payload/
+          
+          # Bundle web assets inside app
+          mkdir -p Payload/CineStream.app/www
+          cp ../index.html ../styles.css ../app.js Payload/CineStream.app/www/ 2>/dev/null || true
+          
+          # Sign binary with ldid
           $THEOS/bin/ldid -Sentitlements.plist Payload/CineStream.app/CineStream
+          
+          # Check binary
           file Payload/CineStream.app/CineStream
+          
+          # Create final IPA
           zip -r CineStream-iOS9-iPadMini1.ipa Payload
 
       - name: Upload CineStream IPA Artifact
