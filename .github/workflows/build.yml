@@ -40,10 +40,13 @@ jobs:
             rm -rf ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain
           fi
           
-          # Ensure clang alias and executable permissions
+          # Link clang binaries
           ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang
           ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang++
           chmod -R +x ~/theos/toolchain/linux/iphone/bin/
+          
+          # Copy compiler headers to SDK
+          cp -r /usr/lib/llvm-14/lib/clang/14.0.0/include/* ~/theos/sdks/iPhoneOS9.3.sdk/usr/include/ 2>/dev/null || true
           
           # 3. Setup ldid
           curl -L "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -o ~/theos/bin/ldid
@@ -60,25 +63,29 @@ jobs:
           
           cd ios-app
           
-          # Build via Theos standard Makefile (handles SDK paths and flags automatically)
-          make clean || true
-          make package FINALPACKAGE=1
-          
-          # Package into IPA
-          mkdir -p Payload
-          cp -r .theos/obj/debug/CineStream.app Payload/ 2>/dev/null || cp -r .theos/obj/CineStream.app Payload/
-          
-          # Bundle web assets inside app
           mkdir -p Payload/CineStream.app/www
           cp ../index.html ../styles.css ../app.js Payload/CineStream.app/www/ 2>/dev/null || true
+          cp Info.plist Payload/CineStream.app/Info.plist
           
+          # Direct compilation with iOS 9.3 SDK & Apple frameworks
+          $THEOS/toolchain/linux/iphone/bin/clang \
+            -target armv7-apple-ios9.0 \
+            -isysroot $THEOS/sdks/iPhoneOS9.3.sdk \
+            -fobjc-arc \
+            -framework UIKit \
+            -framework WebKit \
+            -framework CoreGraphics \
+            -framework Foundation \
+            main.m \
+            -o Payload/CineStream.app/CineStream
+            
           # Sign binary with ldid
           $THEOS/bin/ldid -Sentitlements.plist Payload/CineStream.app/CineStream
           
-          # Check binary
+          # Print architecture info
           file Payload/CineStream.app/CineStream
           
-          # Create final IPA
+          # Package IPA
           zip -r CineStream-iOS9-iPadMini1.ipa Payload
 
       - name: Upload CineStream IPA Artifact
