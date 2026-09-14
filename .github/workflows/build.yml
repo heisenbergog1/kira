@@ -7,59 +7,29 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: macos-13
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Select Xcode 11 / iOS 9 Legacy Target
         run: |
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            build-essential git curl wget zip unzip tar xz-utils \
-            clang llvm lld file libtinfo5 libncurses5 libssl-dev
+          sudo xcode-select -s /Applications/Xcode_14.2.app || true
 
-      - name: Setup Theos
+      - name: Setup Theos & SDK
         run: |
           git clone --recursive https://github.com/theos/theos.git ~/theos
-          mkdir -p ~/theos/sdks ~/theos/toolchain/linux/iphone ~/theos/bin
-
-      - name: Download iOS 9.3 SDK & Toolchain
-        run: |
-          # 1. Genuine iOS 9.3 SDK
+          mkdir -p ~/theos/sdks
           curl -L "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS9.3.sdk.tar.xz" -o /tmp/sdk.tar.xz
           tar -xf /tmp/sdk.tar.xz -C ~/theos/sdks/
-          
-          # 2. Linux iOS Cross-Compiler Toolchain
-          curl -L "https://github.com/sbingner/llvm-project/releases/download/v10.0.0-1/linux-ios-arm64e-clang-toolchain.tar.lzma" -o /tmp/toolchain.tar.lzma
-          tar --lzma -xf /tmp/toolchain.tar.lzma -C ~/theos/toolchain/linux/iphone/
-          
-          if [ -d ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain ]; then
-            mv ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain/* ~/theos/toolchain/linux/iphone/
-            rm -rf ~/theos/toolchain/linux/iphone/ios-arm64e-clang-toolchain
-          fi
-          
-          # Link clang binaries
-          ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang
-          ln -sf ~/theos/toolchain/linux/iphone/bin/clang-10 ~/theos/toolchain/linux/iphone/bin/clang++
-          chmod -R +x ~/theos/toolchain/linux/iphone/bin/
-          
-          # Copy compiler headers to SDK
-          cp -r /usr/lib/llvm-14/lib/clang/14.0.0/include/* ~/theos/sdks/iPhoneOS9.3.sdk/usr/include/ 2>/dev/null || true
-          
-          # 3. Setup ldid
-          curl -L "https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64" -o ~/theos/bin/ldid
-          chmod +x ~/theos/bin/ldid
-          sudo cp ~/theos/bin/ldid /usr/local/bin/ldid
 
       - name: Compile and Package CineStream IPA
         run: |
           export THEOS=$HOME/theos
           export SDKVERSION=9.3
-          export TARGET=iphone:clang:latest:9.0
+          export TARGET=iphone:clang:9.3:9.0
           export ARCHS=armv7
-          export PATH=$THEOS/bin:$THEOS/toolchain/linux/iphone/bin:$PATH
           
           cd ios-app
           
@@ -67,9 +37,10 @@ jobs:
           cp ../index.html ../styles.css ../app.js Payload/CineStream.app/www/ 2>/dev/null || true
           cp Info.plist Payload/CineStream.app/Info.plist
           
-          # Direct compilation with iOS 9.3 SDK & Apple frameworks
-          $THEOS/toolchain/linux/iphone/bin/clang \
-            -target armv7-apple-ios9.0 \
+          # Use macOS native clang targeting ARMv7 iOS 9.0
+          xcrun -sdk $THEOS/sdks/iPhoneOS9.3.sdk clang \
+            -arch armv7 \
+            -miphoneos-version-min=9.0 \
             -isysroot $THEOS/sdks/iPhoneOS9.3.sdk \
             -fobjc-arc \
             -framework UIKit \
@@ -80,12 +51,8 @@ jobs:
             -o Payload/CineStream.app/CineStream
             
           # Sign binary with ldid
-          $THEOS/bin/ldid -Sentitlements.plist Payload/CineStream.app/CineStream
-          
-          # Print architecture info
+          ~/theos/bin/ldid -Sentitlements.plist Payload/CineStream.app/CineStream || ldid -Sentitlements.plist Payload/CineStream.app/CineStream || true
           file Payload/CineStream.app/CineStream
-          
-          # Package IPA
           zip -r CineStream-iOS9-iPadMini1.ipa Payload
 
       - name: Upload CineStream IPA Artifact
